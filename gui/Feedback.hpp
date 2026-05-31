@@ -1,0 +1,40 @@
+#ifndef FEEDBACKSCREEN_H_
+#define FEEDBACKSCREEN_H_
+
+#include "../libs/get/src/Get.hpp"
+
+#include "../libs/chesto/src/Button.hpp"
+#include "../libs/chesto/src/ImageElement.hpp"
+#include "../libs/chesto/src/TextElement.hpp"
+#include "../libs/chesto/src/NetImageElement.hpp"
+#include "../libs/chesto/src/EKeyboard.hpp"
+
+class Feedback : public Element
+{
+public:
+	Feedback(Package& package);
+
+	void render(Element* parent);
+	bool process(InputEvents* event);
+	bool needsRefresh = false;
+
+	Package* package = NULL;
+
+	void submit();
+	void back();
+
+private:
+	void keyboardInputCallback();
+
+	TextElement title;
+	NetImageElement icon;
+	EKeyboard keyboard;
+	Button quit;
+	Button send;
+	Button backspaceBtn;
+	Button capsBtn;
+	TextElement response;
+	TextElement feedback;
+};
+
+#endif

@@ -1,0 +1,9 @@
+image: ubuntu:22.04
+
+CLI:
+  script:
+    - apt-get update && apt-get -y install python3 wget zlib1g-dev gcc g++ libcurl4-openssl-dev libxml2 xz-utils lzma build-essential libssl-dev
+    - make && make run_tests
+  artifacts:
+    paths:
+      - get
