@@ -292,7 +292,7 @@ bool MainDisplay::process(InputEvents* event)
 		if (!isOnline)
 		{
 			std::string connTestMsg = replaceAll(i18n("errors.conntest"), "PLATFORM", PLATFORM);
-			RootDisplay::switchSubscreen(new ErrorScreen(i18n("errors.nowifi"), connTestMsg + "\n" + i18n("errors.dnsmsg") + " " + META_REPO));
+			RootDisplay::switchSubscreen(new ErrorScreen(i18n("errors.nowifi"), connTestMsg + "\n" + i18n("errors.dnsmsg")));
 			return true;
 		}
 
