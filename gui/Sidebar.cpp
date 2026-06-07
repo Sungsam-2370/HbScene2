@@ -14,7 +14,7 @@ Sidebar::Sidebar()
 	, subtitle("v" APP_VERSION " (" __DATE__ ")", 18)
 #else
 	, title("Switch Scene Eshop", 22)
-	, subtitle("v" APP_VERSION " for " PLATFORM, 18)
+	, subtitle(APP_VERSION " para " PLATFORM, 18)
 #endif
 {
 	// a sidebar consists of:
