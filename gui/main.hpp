@@ -30,3 +30,8 @@
 // true  = carpeta sdmc:/config/switch-scene/Overlays existe → acceso completo
 // false = carpeta no encontrada → navegación libre, descargas bloqueadas
 extern bool gSwitchSceneValid;
+
+// Atmosphere hash validation
+// true  = sd:atmosphere/package3 existe y su SHA-256 coincide con el esperado
+// false = archivo no encontrado o hash incorrecto → descargas bloqueadas
+extern bool gAtmosphereValid;

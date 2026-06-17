@@ -54,6 +54,54 @@ static bool checkSwitchScene()
 }
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Atmosphere hash validation
+// Verifica que sd:atmosphere/package3 exista y que su SHA-256 coincida
+// con el hash permitido. Usa mbedtls, disponible en el SDK de libnx.
+// ---------------------------------------------------------------------------
+#include <mbedtls/sha256.h>
+
+bool gAtmosphereValid = false;
+
+static bool checkAtmosphereHash()
+{
+	// Hash SHA-256 permitido (en minúsculas, sin espacios)
+	static const char ALLOWED_HASH[] =
+	    "0151f0e4d0a01077d7f7e08079a854b2ee516bff897d8eb0a8fed6bf1e645c73";
+
+	const char* FILE_PATH = "sdmc:/atmosphere/package3";
+
+	// Abrir el archivo
+	FILE* f = fopen(FILE_PATH, "rb");
+	if (!f)
+		return false;
+
+	// Calcular SHA-256 en bloques para no cargar todo en RAM
+	mbedtls_sha256_context ctx;
+	mbedtls_sha256_init(&ctx);
+	mbedtls_sha256_starts(&ctx, 0); // 0 = SHA-256 (no SHA-224)
+
+	unsigned char buf[4096];
+	size_t n;
+	while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+		mbedtls_sha256_update(&ctx, buf, n);
+
+	fclose(f);
+
+	unsigned char digest[32];
+	mbedtls_sha256_finish(&ctx, digest);
+	mbedtls_sha256_free(&ctx);
+
+	// Convertir digest a hex string y comparar
+	char hexDigest[65];
+	for (int i = 0; i < 32; i++)
+		snprintf(hexDigest + i * 2, 3, "%02x", digest[i]);
+	hexDigest[64] = '\0';
+
+	return (strcmp(hexDigest, ALLOWED_HASH) == 0);
+}
+// ---------------------------------------------------------------------------
+
 #if defined(__WIIU__)
 void setPlatformPwd()
 {
@@ -93,6 +141,9 @@ int main(int argc, char* argv[])
 
 	// Verificar si el PkUnico de Switch Scene está instalado
 	gSwitchSceneValid = checkSwitchScene();
+
+	// Verificar el hash de sd:atmosphere/package3
+	gAtmosphereValid = checkAtmosphereHash();
 
 	bool cliMode = false;
 

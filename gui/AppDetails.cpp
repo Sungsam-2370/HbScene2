@@ -46,9 +46,10 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	cancel.action = std::bind(&AppDetails::back, this);
 
 	// Si el usuario no tiene el PkUnico de Switch Scene instalado,
+	// O si el hash de sd:atmosphere/package3 no es válido,
 	// deshabilitar el boton de descarga: vaciar su accion y cambiar el texto.
 	// El texto corto "Requiere PkUnico" cabe sin salirse del contenedor.
-	if (!gSwitchSceneValid && this->package->getStatus() != INSTALLED)
+	if ((!gSwitchSceneValid || !gAtmosphereValid) && this->package->getStatus() != INSTALLED)
 	{
 		download.action = nullptr;
 		download.updateText("Requiere PkUnico");
