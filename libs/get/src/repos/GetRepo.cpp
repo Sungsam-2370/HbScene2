@@ -142,9 +142,9 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 			package->downloads += cur["web_dls"].GetInt();
 		if (cur.HasMember("extracted"))
 			// convert KB to bytes
-			package->extracted_size += cur["extracted"].GetInt() * 1000;
+			package->extracted_size += cur["extracted"].GetUint64() * 1000;
 		if (cur.HasMember("filesize"))
-			package->download_size += cur["filesize"].GetInt() * 1000; // ibid
+			package->download_size += cur["filesize"].GetUint64() * 1000; // ibid
 
 		if (cur.HasMember("category"))
 			package->category = cur["category"].GetString();

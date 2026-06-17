@@ -121,11 +121,11 @@ public:
 		return downloads;
 	}
 
-	[[nodiscard]] int getDownloadSize() const {
+	[[nodiscard]] uint64_t getDownloadSize() const {
 		return download_size;
 	}
 
-	[[nodiscard]] int getExtractedSize() const {
+	[[nodiscard]] uint64_t getExtractedSize() const {
 		return extracted_size;
 	}
 
@@ -186,8 +186,8 @@ private:
 	int updated_timestamp = 0;
 
 	int downloads = 0;
-	int extracted_size = 0;
-	int download_size = 0;
+	uint64_t extracted_size = 0;
+	uint64_t download_size = 0;
 	int screens = 0;
 
 	std::string category;
