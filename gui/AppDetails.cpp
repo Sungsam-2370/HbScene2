@@ -47,11 +47,21 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 
 	// Si el usuario no tiene el PkUnico de Switch Scene instalado,
 	// O si el hash de sd:atmosphere/package3 no es válido,
-	// deshabilitar el boton de descarga: vaciar su accion y cambiar el texto.
-	// El texto corto "Requiere PkUnico" cabe sin salirse del contenedor.
+	// mostrar un dialogo informativo en lugar de cerrar el programa.
 	if ((!gSwitchSceneValid || !gAtmosphereValid) && this->package->getStatus() != INSTALLED)
 	{
-		download.action = nullptr;
+		noValidationDialog = new AlertDialog(
+			"Acceso restringido",
+			"Para poder descargar debe usar\nel paquete de archivos de\nliberacion de Switch Scene."
+		);
+		noValidationDialog->onConfirm = [this]() {
+			noValidationDialog->hidden = true;
+		};
+		super::append(noValidationDialog);
+
+		download.action = [this]() {
+			noValidationDialog->show();
+		};
 		download.updateText("Requiere PkUnico");
 	}
 

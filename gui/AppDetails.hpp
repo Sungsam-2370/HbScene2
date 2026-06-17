@@ -3,6 +3,7 @@
 
 #include "AppDetailsContent.hpp"
 #include "AppCard.hpp"
+#include "../libs/chesto/src/AlertDialog.hpp"
 
 class AppList;
 
@@ -63,6 +64,7 @@ private:
 	TextElement details;
 	AppDetailsContent content;
 	TextElement downloadStatus;
+	AlertDialog* noValidationDialog = nullptr;
 };
 
 #endif
