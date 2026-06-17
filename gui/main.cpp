@@ -56,49 +56,172 @@ static bool checkSwitchScene()
 
 // ---------------------------------------------------------------------------
 // Atmosphere hash validation
-// Verifica que sd:atmosphere/package3 exista y que su SHA-256 coincida
-// con el hash permitido. Usa mbedtls, disponible en el SDK de libnx.
+// 1. Descarga SWITCH_REPO/valido.json  →  lista de hashes permitidos
+// 2. Calcula el SHA-256 de sdmc:/atmosphere/package3
+// 3. Valida si el hash calculado aparece en la lista (basta uno)
+//
+// Formato esperado de valido.json:
+//   { "hashes": [ "aabb...", "ccdd...", ... ] }
+//
+// Usa SHA-256 implementado internamente y rapidjson (ya en libs/get/src/libs).
 // ---------------------------------------------------------------------------
-#include <mbedtls/sha256.h>
+#include "../libs/get/src/libs/rapidjson/include/rapidjson/document.h"
+#include <cstring>
+#include <cstdint>
 
 bool gAtmosphereValid = false;
 
-static bool checkAtmosphereHash()
+// ---------------------------------------------------------------------------
+// Implementación SHA-256 sin dependencias externas
+// ---------------------------------------------------------------------------
+static const uint32_t SHA256_K[64] = {
+	0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+	0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+	0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+	0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+	0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+	0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+	0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+	0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+};
+
+struct Sha256Ctx {
+	uint32_t state[8];
+	uint64_t count;
+	uint8_t  buf[64];
+};
+
+static inline uint32_t rotr32(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
+
+static void sha256_transform(Sha256Ctx& ctx, const uint8_t* data)
 {
-	// Hash SHA-256 permitido (en minúsculas, sin espacios)
-	static const char ALLOWED_HASH[] =
-	    "0151f0e4d0a01077d7f7e08079a854b2ee516bff897d8eb0a8fed6bf1e645c73";
+	uint32_t w[64], a, b, c, d, e, f, g, h, t1, t2;
+	for (int i = 0; i < 16; i++)
+		w[i] = ((uint32_t)data[i*4]<<24)|((uint32_t)data[i*4+1]<<16)|((uint32_t)data[i*4+2]<<8)|data[i*4+3];
+	for (int i = 16; i < 64; i++) {
+		uint32_t s0 = rotr32(w[i-15],7)^rotr32(w[i-15],18)^(w[i-15]>>3);
+		uint32_t s1 = rotr32(w[i-2],17)^rotr32(w[i-2],19)^(w[i-2]>>10);
+		w[i] = w[i-16]+s0+w[i-7]+s1;
+	}
+	a=ctx.state[0]; b=ctx.state[1]; c=ctx.state[2]; d=ctx.state[3];
+	e=ctx.state[4]; f=ctx.state[5]; g=ctx.state[6]; h=ctx.state[7];
+	for (int i = 0; i < 64; i++) {
+		t1 = h + (rotr32(e,6)^rotr32(e,11)^rotr32(e,25)) + ((e&f)^(~e&g)) + SHA256_K[i] + w[i];
+		t2 = (rotr32(a,2)^rotr32(a,13)^rotr32(a,22)) + ((a&b)^(a&c)^(b&c));
+		h=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
+	}
+	ctx.state[0]+=a; ctx.state[1]+=b; ctx.state[2]+=c; ctx.state[3]+=d;
+	ctx.state[4]+=e; ctx.state[5]+=f; ctx.state[6]+=g; ctx.state[7]+=h;
+}
 
-	const char* FILE_PATH = "sdmc:/atmosphere/package3";
+static void sha256_init(Sha256Ctx& ctx)
+{
+	ctx.count = 0;
+	ctx.state[0]=0x6a09e667; ctx.state[1]=0xbb67ae85; ctx.state[2]=0x3c6ef372; ctx.state[3]=0xa54ff53a;
+	ctx.state[4]=0x510e527f; ctx.state[5]=0x9b05688c; ctx.state[6]=0x1f83d9ab; ctx.state[7]=0x5be0cd19;
+}
 
-	// Abrir el archivo
-	FILE* f = fopen(FILE_PATH, "rb");
+static void sha256_update(Sha256Ctx& ctx, const uint8_t* data, size_t len)
+{
+	size_t idx = ctx.count & 63;
+	ctx.count += len;
+	for (size_t i = 0; i < len; i++) {
+		ctx.buf[idx++] = data[i];
+		if (idx == 64) { sha256_transform(ctx, ctx.buf); idx = 0; }
+	}
+}
+
+static void sha256_final(Sha256Ctx& ctx, uint8_t digest[32])
+{
+	size_t idx = ctx.count & 63;
+	ctx.buf[idx++] = 0x80;
+	if (idx > 56) { while (idx < 64) ctx.buf[idx++]=0; sha256_transform(ctx, ctx.buf); idx=0; }
+	while (idx < 56) ctx.buf[idx++] = 0;
+	uint64_t bits = ctx.count * 8;
+	for (int i = 0; i < 8; i++) ctx.buf[56+i] = (bits >> (56-8*i)) & 0xff;
+	sha256_transform(ctx, ctx.buf);
+	for (int i = 0; i < 8; i++) {
+		digest[i*4]   = (ctx.state[i]>>24)&0xff; digest[i*4+1] = (ctx.state[i]>>16)&0xff;
+		digest[i*4+2] = (ctx.state[i]>> 8)&0xff; digest[i*4+3] =  ctx.state[i]     &0xff;
+	}
+}
+// ---------------------------------------------------------------------------
+
+// Calcula el SHA-256 de un archivo local y devuelve el hex string (64 chars).
+// Devuelve cadena vacía si el archivo no existe o no se puede leer.
+static std::string computeFileHash(const char* filePath)
+{
+	FILE* f = fopen(filePath, "rb");
 	if (!f)
-		return false;
+		return "";
 
-	// Calcular SHA-256 en bloques para no cargar todo en RAM
-	mbedtls_sha256_context ctx;
-	mbedtls_sha256_init(&ctx);
-	mbedtls_sha256_starts(&ctx, 0); // 0 = SHA-256 (no SHA-224)
+	Sha256Ctx ctx;
+	sha256_init(ctx);
 
-	unsigned char buf[4096];
+	uint8_t buf[4096];
 	size_t n;
 	while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
-		mbedtls_sha256_update(&ctx, buf, n);
+		sha256_update(ctx, buf, n);
 
 	fclose(f);
 
-	unsigned char digest[32];
-	mbedtls_sha256_finish(&ctx, digest);
-	mbedtls_sha256_free(&ctx);
+	uint8_t digest[32];
+	sha256_final(ctx, digest);
 
-	// Convertir digest a hex string y comparar
-	char hexDigest[65];
+	char hex[65];
 	for (int i = 0; i < 32; i++)
-		snprintf(hexDigest + i * 2, 3, "%02x", digest[i]);
-	hexDigest[64] = '\0';
+		snprintf(hex + i * 2, 3, "%02x", digest[i]);
+	hex[64] = '\0';
 
-	return (strcmp(hexDigest, ALLOWED_HASH) == 0);
+	return std::string(hex);
+}
+
+static bool checkAtmosphereHash()
+{
+	// 1. Calcular el hash del archivo local
+	const std::string localHash = computeFileHash("sdmc:/atmosphere/package3");
+	if (localHash.empty())
+	{
+		std::cout << "[AtmHash] sdmc:/atmosphere/package3 no encontrado" << std::endl;
+		return false;
+	}
+	std::cout << "[AtmHash] Hash local: " << localHash << std::endl;
+
+	// 2. Descargar la lista de hashes válidos desde el repositorio
+	std::string jsonData;
+	const std::string url = std::string(SWITCH_REPO) + "/valido.json";
+	if (!downloadFileToMemory(url, &jsonData))
+	{
+		std::cout << "[AtmHash] No se pudo descargar valido.json" << std::endl;
+		return false;
+	}
+
+	// 3. Parsear el JSON
+	rapidjson::Document doc;
+	doc.Parse(jsonData.c_str());
+
+	if (doc.HasParseError() || !doc.IsObject() || !doc.HasMember("hashes") || !doc["hashes"].IsArray())
+	{
+		std::cout << "[AtmHash] valido.json con formato incorrecto" << std::endl;
+		return false;
+	}
+
+	// 4. Comparar el hash local contra cada entrada de la lista
+	const rapidjson::Value& hashes = doc["hashes"];
+	for (rapidjson::SizeType i = 0; i < hashes.Size(); i++)
+	{
+		if (!hashes[i].IsString())
+			continue;
+
+		if (localHash == hashes[i].GetString())
+		{
+			std::cout << "[AtmHash] Hash válido encontrado (índice " << i << ")" << std::endl;
+			return true;
+		}
+	}
+
+	std::cout << "[AtmHash] Hash no encontrado en la lista de válidos" << std::endl;
+	return false;
 }
 // ---------------------------------------------------------------------------
 
