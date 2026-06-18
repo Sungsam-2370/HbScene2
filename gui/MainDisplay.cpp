@@ -29,6 +29,7 @@ MainDisplay::MainDisplay()
 	needsRedraw = true;
 
 	updateSidebarColor();
+	this->hasBackground = false; // AppDetails dibuja su propio fondo
 
 	#if defined(WII)
 		if(CONF_GetAspectRatio() == CONF_ASPECT_16_9)
