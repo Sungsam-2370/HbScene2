@@ -1,7 +1,8 @@
+#pragma once
 #include <string>
 #include <functional>
-#include "TextElement.hpp"
-#include "Container.hpp"
+#include "../libs/chesto/src/TextElement.hpp"
+#include "../libs/chesto/src/Container.hpp"
 
 class AlertDialog : public Element {
 public:
