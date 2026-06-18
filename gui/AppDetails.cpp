@@ -415,13 +415,15 @@ void AppDetails::render(Element* parent)
 	if (this->parent == NULL)
 		this->parent = parent;
 
-	// Dibujar fondo del area de contenido solamente
+	// draw background solo en el area de contenido, sin tapar el sidebar
 	int sidebarW = appList->x;
-	CST_Rect contentRect = { sidebarW, 0, SCREEN_WIDTH - sidebarW, SCREEN_HEIGHT };
+	CST_Rect dimens = { sidebarW, 0, SCREEN_WIDTH - sidebarW, SCREEN_HEIGHT };
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
-	CST_FillRect(RootDisplay::renderer, &contentRect);
+	CST_FillRect(RootDisplay::renderer, &dimens);
 
-	// Renderizar elementos
+	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
+
+	// draw all elements
 	super::render(parent);
 }
 

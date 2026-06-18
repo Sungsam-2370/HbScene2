@@ -149,11 +149,8 @@ void RootDisplay::render(Element* parent)
 {
 	if (RootDisplay::subscreen)
 	{
-		// Renderizar subscreen (fondo + contenido)
+		super::render(parent);
 		RootDisplay::subscreen->render(this);
-		// Renderizar solo el sidebar encima (no todo MainDisplay)
-		if (!elements.empty() && elements[0])
-			elements[0]->render(this); // elements[0] es el sidebar
 		this->update();
 		return;
 	}
