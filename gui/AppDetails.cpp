@@ -416,7 +416,8 @@ void AppDetails::render(Element* parent)
 		this->parent = parent;
 
 	// Dibujar fondo del sidebar con su color correcto
-	int sidebarW = appList->x;
+	// sidebar->width es el ancho real calculado por AppList
+	int sidebarW = appList->sidebar->width + 35;
 	CST_Rect sidebarDimens = { 0, 0, sidebarW, SCREEN_HEIGHT };
 	CST_Color sidebarCol = {
 		HBAS::ThemeManager::sidebarColor.r,
@@ -427,7 +428,7 @@ void AppDetails::render(Element* parent)
 	CST_SetDrawColor(RootDisplay::renderer, sidebarCol);
 	CST_FillRect(RootDisplay::renderer, &sidebarDimens);
 
-	// Dibujar fondo del area de contenido
+	// Dibujar fondo del area de contenido (desde el borde del sidebar hasta el fin de pantalla)
 	CST_Rect dimens = { sidebarW, 0, SCREEN_WIDTH - sidebarW, SCREEN_HEIGHT };
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
 	CST_FillRect(RootDisplay::renderer, &dimens);
