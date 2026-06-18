@@ -1,6 +1,3 @@
 [submodule "libs/librpxloader"]
 	path = libs/librpxloader
 	url = https://github.com/wiiu-env/librpxloader.git
-[submodule "libs/chesto"]
-	path = libs/chesto
-	url = https://github.com/fortheusers/chesto
