@@ -1,0 +1,85 @@
+name: Build library
+
+on:
+  push:
+    branches:
+      - main
+      - sdl2-only
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  all:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - platform: pc
+            ext: bin
+          - platform: wiiu
+            ext: wuhb
+          - platform: switch
+            ext: nro
+          - platform: 3ds
+            ext: 3dsx
+          - platform: wii
+            ext: dol
+    container:
+      image: ghcr.io/fortheusers/sealeo:evo
+    steps:
+    - uses: actions/checkout@main
+      with:
+        submodules: recursive
+    - name: Build ${{ matrix.platform }} Chestotesto
+      run: |
+        git clone https://gitlab.com/4TU/chestotesto.git /chestotesto
+        cp -rf . /chestotesto/libs/chesto
+        (cd /chestotesto && make ${{ matrix.platform }})
+        cp /chestotesto/chestotesto.${{ matrix.ext }} chestotesto.${{ matrix.ext }}
+    - uses: actions/upload-artifact@v4
+      with:
+        name: chestotesto.${{ matrix.ext }}
+        path: /__w/chesto/chesto/chestotesto.${{ matrix.ext }}
+    - if: matrix.platform == 'wiiu'
+      uses: actions/upload-artifact@v4
+      with:
+        name: chestotesto.rpx
+        path: /__w/chesto/chesto/chestotesto.rpx
+
+  docs:
+    runs-on: ubuntu-latest
+    container:
+      image: node:latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get -y install git doxygen
+    - uses: actions/checkout@main
+      with:
+        submodules: recursive
+    - name: Generate documentation
+      run: |
+        doxygen
+    - name: Copy over pages files
+      run: |
+        mkdir -p public
+        cp -r docs/html/* public
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./public
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

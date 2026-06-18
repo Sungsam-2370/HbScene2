@@ -1,0 +1,110 @@
+include $(HELPERS)/Makefile.sdl2
+include $(DEVKITPRO)/libnx/switch_rules
+
+EXEFS_SRC	:=	exefs_src
+
+ARCH	+=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -fPIE
+
+CFLAGS	+=	-g -Wall -O2 \
+			$(ARCH) $(DEFINES)
+
+CFLAGS	+=	$(INCLUDE) -DSWITCH -D__LIBNX__ -DUSE_FILE32API -DNOSTYLUS -DUSE_RAMFS -DMUSIC
+
+LDFLAGS	+=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+
+LIBS	+= -lcurl -lEGL -lGLESv2 -lglapi -ldrm_nouveau -lwebp -lnx -lharfbuzz -lmodplug -lopusfile -lvorbisidec -lopus -logg -lmpg123 -lSDL2
+
+BUILD   := build_switch
+LIBDIRS	:= $(PORTLIBS) $(LIBNX)
+
+export LD	:=	$(CXX)
+
+#---------------------------------------------------------------------------------
+ifneq ($(BUILD),$(notdir $(CURDIR)))
+#---------------------------------------------------------------------------------
+
+export OUTPUT	:=	$(CURDIR)/$(BINARY)_switch
+
+export VPATH	+= $(foreach dir,$(DATA),$(CURDIR)/$(dir))
+
+BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
+
+export OFILES	+=	$(addsuffix .o,$(BINFILES))
+export INCLUDE	+= 	$(foreach dir,$(LIBDIRS),-I$(dir)/include/SDL)
+
+export BUILD_EXEFS_SRC := $(TOPDIR)/$(EXEFS_SRC)
+
+ifeq ($(strip $(ICON_JPG)),)
+	icons := $(wildcard *.jpg)
+	ifneq (,$(findstring $(BINARY).jpg,$(icons)))
+		export APP_ICON := $(TOPDIR)/$(BINARY).jpg
+	else
+		ifneq (,$(findstring icon.jpg,$(icons)))
+			export APP_ICON := $(TOPDIR)/icon.jpg
+		endif
+	endif
+else
+	export APP_ICON := $(ICON_JPG)
+endif
+
+ifeq ($(strip $(NO_ICON)),)
+	export NROFLAGS += --icon=$(APP_ICON)
+endif
+
+export NROFLAGS += --nacp=$(OUTPUT).nacp
+
+ifneq ($(APP_TITLEID),)
+	export NACPFLAGS += --titleid=$(APP_TITLEID)
+endif
+
+
+.PHONY: $(BUILD) clean all
+
+#---------------------------------------------------------------------------------
+switch: $(BUILD)
+
+$(BUILD):
+	@[ -d $@ ] || mkdir -p $@
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(HELPERS)/Makefile.switch
+
+#---------------------------------------------------------------------------------
+clean:
+	@echo clean ...
+	@rm -fr $(BUILD) $(BINARY).pfs0 $(BINARY).nso $(BINARY).nro $(BINARY).nacp $(BINARY).elf
+	@find . -name "*.o" -exec rm {} \;
+
+
+#---------------------------------------------------------------------------------
+else
+.PHONY:	all switch
+
+include $(HELPERS)/Makefile.resin
+
+DEPENDS	:=	$(OFILES:.o=.d)
+
+#---------------------------------------------------------------------------------
+# main targets
+#---------------------------------------------------------------------------------
+all	:	$(OUTPUT).pfs0 $(PWD)/$(BINARY).nro
+
+$(OUTPUT).pfs0	:	$(OUTPUT).nso
+
+$(BINARY).nso	:	$(OUTPUT).elf
+
+$(PWD)/$(BINARY).nro	:	$(OUTPUT).elf $(OUTPUT).nacp
+
+$(OUTPUT).elf	:	$(OFILES)
+
+#---------------------------------------------------------------------------------
+# you need a rule like this for each extension you use as binary data
+#---------------------------------------------------------------------------------
+%.bin.o	:	%.bin
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	@$(bin2o)
+
+-include $(DEPENDS)
+
+#---------------------------------------------------------------------------------------
+endif
+#---------------------------------------------------------------------------------------

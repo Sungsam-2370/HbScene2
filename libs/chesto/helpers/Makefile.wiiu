@@ -1,0 +1,66 @@
+include $(HELPERS)/Makefile.sdl2
+include $(DEVKITPRO)/wut/share/wut_rules
+
+export APP_TV_SPLASH  := $(PWD)/assets/tv_splash.png
+export APP_DRC_SPLASH := $(PWD)/assets/drc_splash.png
+export APP_ICON       := $(PWD)/assets/icon.png
+
+CFLAGS		+=	-g -Wall -O2 -ffunction-sections \
+				$(MACHDEP)
+
+CFLAGS		+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DUSE_FILE32API -DNOCRYPT -DINPUT_JOYSTICK -DMUSIC -DUSE_RAMFS
+
+ASFLAGS		+=	-g $(MACHDEP)
+LDFLAGS		+=	-g $(MACHDEP) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)
+
+LIBS		+= -lmodplug -lmpg123 -lvorbisidec -logg -lSDL2 -lwut -lcurl -lmbedtls -lmbedcrypto -lmbedx509 -lz -lwut -lharfbuzz -lfreetype
+
+BUILD		:= build_wiiu
+LIBDIRS		+= $(PORTLIBS) $(WUT_ROOT)
+
+SOURCES     += $(CHESTO_DIR)/libs/wiiu_kbd
+VPATH       += $(CHESTO_DIR)/libs/wiiu_kbd
+
+export LD	:=	$(CXX)
+
+#-------------------------------------------------------------------------------
+ifneq ($(BUILD),$(notdir $(CURDIR)))
+#-------------------------------------------------------------------------------
+
+export OUTPUT	:=	$(CURDIR)/$(BINARY)_wiiu
+
+.PHONY: $(BUILD) clean all wiiu
+
+#-------------------------------------------------------------------------------
+wiiu: $(BUILD)
+
+$(BUILD): $(SRCFILES)
+	@[ -d $@ ] || mkdir -p $@
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(HELPERS)/Makefile.wiiu
+
+#-------------------------------------------------------------------------------
+clean:
+	@echo clean ...
+	@rm -fr $(BUILD) $(BINARY).rpx $(BINARY).elf $(BINARY).wuhb
+
+#-------------------------------------------------------------------------------
+else
+.PHONY:	all
+include $(HELPERS)/Makefile.resin
+
+DEPENDS	:=	$(OFILES:.o=.d)
+
+#-------------------------------------------------------------------------------
+# main targets
+#-------------------------------------------------------------------------------
+all		:	$(PWD)/$(BINARY).wuhb
+
+$(PWD)/$(BINARY).wuhb	:	$(PWD)/$(BINARY).rpx
+$(PWD)/$(BINARY).rpx	:	$(OUTPUT).elf
+$(OUTPUT).elf	:	$(OFILES)
+
+-include $(DEPENDS)
+
+#-------------------------------------------------------------------------------
+endif
+#------------------------------------------------------------------------------- 
