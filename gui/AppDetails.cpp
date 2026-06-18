@@ -108,8 +108,6 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	super::append(&details);
 
 	// the scrollable portion of the app details page
-	// se posiciona despues del sidebar para no taparlo
-	content.position(appList->x, 0);
 	super::append(&content);
 
 	super::append(&download);
@@ -436,8 +434,15 @@ void AppDetails::render(Element* parent)
 	CST_SetDrawColor(RootDisplay::renderer, rightPanelColor);
 	CST_FillRect(RootDisplay::renderer, &rightPanelDimens);
 
+	// Recortar el contenido para que no se dibuje sobre el area del sidebar izquierdo
+	CST_Rect clipRect = { sidebarW, 0, SCREEN_WIDTH - sidebarW, SCREEN_HEIGHT };
+	SDL_RenderSetClipRect(RootDisplay::renderer, &clipRect);
+
 	// draw all elements
 	super::render(parent);
+
+	// quitar el recorte para no afectar el resto de la pantalla (sidebar, etc.)
+	SDL_RenderSetClipRect(RootDisplay::renderer, NULL);
 }
 
 int AppDetails::updatePopupStatus(int status, int num, int num_total)
