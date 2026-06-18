@@ -149,7 +149,8 @@ void RootDisplay::render(Element* parent)
 {
 	if (RootDisplay::subscreen)
 	{
-		super::render(parent);
+		// No renderizar MainDisplay (sidebar+appList) para que el subscreen
+		// (AppDetails) sea lo unico visible, sin el menu de categorias detras
 		RootDisplay::subscreen->render(this);
 		this->update();
 		return;

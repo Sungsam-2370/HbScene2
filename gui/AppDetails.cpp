@@ -39,10 +39,10 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 
 	// download/update/remove button (2)
 
-	download.position(SCREEN_WIDTH - 340, SCREEN_HEIGHT - 170);
+	download.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 170);
 	download.action = std::bind(&AppDetails::proceed, this);
 
-	cancel.position(SCREEN_WIDTH - 340, SCREEN_HEIGHT - 90);
+	cancel.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 90);
 	cancel.action = std::bind(&AppDetails::back, this);
 
 	// Si el usuario no tiene el PkUnico de Switch Scene instalado,
@@ -104,7 +104,7 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 
 	// more details
 
-	details.position(SCREEN_WIDTH - 340, 50);
+	details.position(SCREEN_WIDTH - 310, 50);
 	super::append(&details);
 
 	// the scrollable portion of the app details page
@@ -415,16 +415,19 @@ void AppDetails::render(Element* parent)
 	if (this->parent == NULL)
 		this->parent = parent;
 
-	int sidebarW = appList->x;
+	// Panel derecho: ancho ajustado para alinearse con los botones (SCREEN_WIDTH - 310)
+	// se le da un margen extra de 20px para que el texto no quede pegado al borde
+	int rightPanelX = SCREEN_WIDTH - 310 - 20;
+	int rightPanelW = SCREEN_WIDTH - rightPanelX;
 
-	// 1. Fondo del panel izquierdo de contenido (entre el sidebar y el panel derecho)
-	CST_Rect contentDimens = { sidebarW, 0, (SCREEN_WIDTH - 340) - sidebarW, SCREEN_HEIGHT };
+	// 1. Fondo del panel de contenido (toda la pantalla menos el panel derecho)
+	CST_Rect contentDimens = { 0, 0, rightPanelX, SCREEN_HEIGHT };
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
 	CST_FillRect(RootDisplay::renderer, &contentDimens);
 
 	// 2. Fondo del panel derecho (detalles: autor, version, tamaño, botones)
 	// usa el color del sidebar para diferenciarse visualmente del panel de contenido
-	CST_Rect rightPanelDimens = { SCREEN_WIDTH - 340, 0, 340, SCREEN_HEIGHT };
+	CST_Rect rightPanelDimens = { rightPanelX, 0, rightPanelW, SCREEN_HEIGHT };
 	CST_Color rightPanelColor = {
 		HBAS::ThemeManager::sidebarColor.r,
 		HBAS::ThemeManager::sidebarColor.g,
@@ -434,15 +437,13 @@ void AppDetails::render(Element* parent)
 	CST_SetDrawColor(RootDisplay::renderer, rightPanelColor);
 	CST_FillRect(RootDisplay::renderer, &rightPanelDimens);
 
-	// Recortar el contenido para que no se dibuje sobre el area del sidebar izquierdo
-	CST_Rect clipRect = { sidebarW, 0, SCREEN_WIDTH - sidebarW, SCREEN_HEIGHT };
-	SDL_RenderSetClipRect(RootDisplay::renderer, &clipRect);
-
 	// draw all elements
 	super::render(parent);
 
-	// quitar el recorte para no afectar el resto de la pantalla (sidebar, etc.)
-	SDL_RenderSetClipRect(RootDisplay::renderer, NULL);
+	// Renderizar el dialogo de validacion AL FINAL para que quede
+	// siempre por encima del contenido y de las imagenes/descripcion
+	if (noValidationDialog)
+		noValidationDialog->render(parent);
 }
 
 int AppDetails::updatePopupStatus(int status, int num, int num_total)
