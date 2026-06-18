@@ -3,7 +3,7 @@
 
 #include "AppDetailsContent.hpp"
 #include "AppCard.hpp"
-#include "AlertDialog.hpp"
+#include "../libs/chesto/src/AlertDialog.hpp"
 
 class AppList;
 
