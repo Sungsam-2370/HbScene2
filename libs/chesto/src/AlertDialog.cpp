@@ -96,8 +96,9 @@ void AlertDialog::show() {
 }
 
 void AlertDialog::render(Element* parent) {
-    // Renderizar siempre al frente encima de todos los demas elementos
-    Element* target = (parent && parent != this) ? parent : this;
+    // Renderizar siempre al frente usando RootDisplay como target
+    // para que aparezca encima de todos los elementos incluyendo subscreens
+    Element* target = RootDisplay::mainDisplay;
     overlay->render(target);
 
     // Borde negro alrededor del cuadro

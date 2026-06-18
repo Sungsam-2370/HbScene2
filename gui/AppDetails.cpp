@@ -415,8 +415,8 @@ void AppDetails::render(Element* parent)
 	if (this->parent == NULL)
 		this->parent = parent;
 
-	// draw white background
-	CST_Rect dimens = { 0, 0, SCREEN_WIDTH - 360, SCREEN_HEIGHT };
+	// draw background - empieza despues del sidebar (360px) para no taparlo
+	CST_Rect dimens = { 360, 0, SCREEN_WIDTH - 360, SCREEN_HEIGHT };
 
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
 	CST_FillRect(RootDisplay::renderer, &dimens);
