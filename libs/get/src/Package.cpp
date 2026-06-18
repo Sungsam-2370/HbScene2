@@ -51,10 +51,10 @@ std::string Package::toString() const
 	return "[" + this->pkg_name + "] (" + this->version + ") \"" + this->title + "\" - " + this->short_desc;
 }
 
-bool Package::downloadZip(std::string_view tmp_path, float*, bool resume) const
+bool Package::downloadZip(std::string_view tmp_path, float*, bool resume, int zipIndex, int zipTotal) const
 {
 	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_DOWNLOADING, 1, 1);
+		libget_status_callback(STATUS_DOWNLOADING, zipIndex, zipTotal);
 
 	// fetch zip file to tmp directory using curl
 	printf("--> Downloading %s to %s%s\n", this->pkg_name.c_str(), tmp_path.data(), resume ? " (resuming)" : "");
@@ -102,14 +102,14 @@ bool Package::downloadZip(std::string_view tmp_path, float*, bool resume) const
 	return success;
 }
 
-bool Package::downloadZip2(std::string_view tmp_path, float*, bool resume) const
+bool Package::downloadZip2(std::string_view tmp_path, float*, bool resume, int zipIndex, int zipTotal) const
 {
 	if (this->zipUrl2.empty()) {
 		return false; // no second zip, nothing to do
 	}
 
 	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_DOWNLOADING, 1, 1);
+		libget_status_callback(STATUS_DOWNLOADING, zipIndex, zipTotal);
 
 	printf("--> Downloading second zip for %s to %s%s\n", this->pkg_name.c_str(), tmp_path.data(), resume ? " (resuming)" : "");
 
@@ -238,12 +238,12 @@ long Package::getPartialDownloadSize(std::string_view tmp_path) const
 	return 0;
 }
 
-bool Package::install(const std::string& pkg_path, const std::string& tmp_path)
+bool Package::install(const std::string& pkg_path, const std::string& tmp_path, int zipIndex, int zipTotal)
 {
 	printf("Going to install %s\n", this->pkg_name.c_str());
 	// assumes that download was called first
 	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_ANALYZING, 1, 1);
+		libget_status_callback(STATUS_ANALYZING, zipIndex, zipTotal);
 
 	if (networking_callback != nullptr)
 		networking_callback(nullptr, 1.0);
@@ -395,7 +395,7 @@ bool Package::install(const std::string& pkg_path, const std::string& tmp_path)
 		auto infoMap = HomebrewZip.GetPathToFilePosMapping();
 
 		if (libget_status_callback != nullptr)
-			libget_status_callback(STATUS_INSTALLING, 1, 1);
+			libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
 
 		int i = 0;
 		const auto& entries = manifest.getEntries();
@@ -507,13 +507,13 @@ bool Package::install(const std::string& pkg_path, const std::string& tmp_path)
 	return true;
 }
 
-bool Package::downloadZip3(std::string_view tmp_path, float*, bool resume) const
+bool Package::downloadZip3(std::string_view tmp_path, float*, bool resume, int zipIndex, int zipTotal) const
 {
 	if (this->zipUrl3.empty())
 		return false;
 
 	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_DOWNLOADING, 1, 1);
+		libget_status_callback(STATUS_DOWNLOADING, zipIndex, zipTotal);
 
 	printf("--> Downloading third zip for %s to %s%s\n", this->pkg_name.c_str(), tmp_path.data(), resume ? " (resuming)" : "");
 
@@ -545,13 +545,13 @@ bool Package::downloadZip3(std::string_view tmp_path, float*, bool resume) const
 	return success;
 }
 
-bool Package::downloadZip4(std::string_view tmp_path, float*, bool resume) const
+bool Package::downloadZip4(std::string_view tmp_path, float*, bool resume, int zipIndex, int zipTotal) const
 {
 	if (this->zipUrl4.empty())
 		return false;
 
 	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_DOWNLOADING, 1, 1);
+		libget_status_callback(STATUS_DOWNLOADING, zipIndex, zipTotal);
 
 	printf("--> Downloading fourth zip for %s to %s%s\n", this->pkg_name.c_str(), tmp_path.data(), resume ? " (resuming)" : "");
 
@@ -583,7 +583,7 @@ bool Package::downloadZip4(std::string_view tmp_path, float*, bool resume) const
 	return success;
 }
 
-bool Package::install2(const std::string& pkg_path, const std::string& tmp_path)
+bool Package::install2(const std::string& pkg_path, const std::string& tmp_path, int zipIndex, int zipTotal)
 {
 	if (this->zipUrl2.empty())
 		return true; // no second zip, nothing to do
@@ -591,7 +591,7 @@ bool Package::install2(const std::string& pkg_path, const std::string& tmp_path)
 	printf("Going to install second zip for %s\n", this->pkg_name.c_str());
 
 	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_ANALYZING, 1, 1);
+		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
 
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_2.zip";
 
@@ -622,7 +622,7 @@ bool Package::install2(const std::string& pkg_path, const std::string& tmp_path)
 	return true;
 }
 
-bool Package::install3(const std::string& pkg_path, const std::string& tmp_path)
+bool Package::install3(const std::string& pkg_path, const std::string& tmp_path, int zipIndex, int zipTotal)
 {
 	if (this->zipUrl3.empty())
 		return true;
@@ -630,7 +630,7 @@ bool Package::install3(const std::string& pkg_path, const std::string& tmp_path)
 	printf("Going to install third zip for %s\n", this->pkg_name.c_str());
 
 	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_ANALYZING, 1, 1);
+		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
 
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_3.zip";
 
@@ -660,7 +660,7 @@ bool Package::install3(const std::string& pkg_path, const std::string& tmp_path)
 	return true;
 }
 
-bool Package::install4(const std::string& pkg_path, const std::string& tmp_path)
+bool Package::install4(const std::string& pkg_path, const std::string& tmp_path, int zipIndex, int zipTotal)
 {
 	if (this->zipUrl4.empty())
 		return true;
@@ -668,7 +668,7 @@ bool Package::install4(const std::string& pkg_path, const std::string& tmp_path)
 	printf("Going to install fourth zip for %s\n", this->pkg_name.c_str());
 
 	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_ANALYZING, 1, 1);
+		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
 
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_4.zip";
 

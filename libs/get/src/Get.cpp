@@ -47,8 +47,14 @@ Get::Get(
 
 int Get::install(Package& package, bool resume)
 {
+	// calcular cuantos zips existen en total para este paquete (1 a 4)
+	int zipTotal = 1;
+	if (!package.zipUrl2.empty()) zipTotal++;
+	if (!package.zipUrl3.empty()) zipTotal++;
+	if (!package.zipUrl4.empty()) zipTotal++;
+
 	// found package in a remote server, fetch it
-	bool located = package.downloadZip(mTmp_path, nullptr, resume);
+	bool located = package.downloadZip(mTmp_path, nullptr, resume, 1, zipTotal);
 
 	if (!located)
 	{
@@ -59,36 +65,36 @@ int Get::install(Package& package, bool resume)
 	}
 
 	// install the package, (extracts manifest, etc)
-	package.install(mPkg_path, mTmp_path);
+	package.install(mPkg_path, mTmp_path, 1, zipTotal);
 
 	// if a second zip exists, download and install it too
 	if (!package.zipUrl2.empty())
 	{
-		bool located2 = package.downloadZip2(mTmp_path, nullptr, resume);
+		bool located2 = package.downloadZip2(mTmp_path, nullptr, resume, 2, zipTotal);
 		if (!located2)
 			printf("--> Error retrieving second zip for [%s]\n", package.getPackageName().c_str());
 		else
-			package.install2(mPkg_path, mTmp_path);
+			package.install2(mPkg_path, mTmp_path, 2, zipTotal);
 	}
 
 	// if a third zip exists, download and install it too
 	if (!package.zipUrl3.empty())
 	{
-		bool located3 = package.downloadZip3(mTmp_path, nullptr, resume);
+		bool located3 = package.downloadZip3(mTmp_path, nullptr, resume, 3, zipTotal);
 		if (!located3)
 			printf("--> Error retrieving third zip for [%s]\n", package.getPackageName().c_str());
 		else
-			package.install3(mPkg_path, mTmp_path);
+			package.install3(mPkg_path, mTmp_path, 3, zipTotal);
 	}
 
 	// if a fourth zip exists, download and install it too
 	if (!package.zipUrl4.empty())
 	{
-		bool located4 = package.downloadZip4(mTmp_path, nullptr, resume);
+		bool located4 = package.downloadZip4(mTmp_path, nullptr, resume, 4, zipTotal);
 		if (!located4)
 			printf("--> Error retrieving fourth zip for [%s]\n", package.getPackageName().c_str());
 		else
-			package.install4(mPkg_path, mTmp_path);
+			package.install4(mPkg_path, mTmp_path, 4, zipTotal);
 	}
 
 	printf("--> Downloaded [%s] to sdroot/\n", package.getPackageName().c_str());

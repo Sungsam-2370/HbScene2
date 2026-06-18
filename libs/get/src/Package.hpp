@@ -45,14 +45,14 @@ public:
 	Package(const Package& other) = default;
 
 	[[nodiscard]] std::string toString() const;
-	bool downloadZip(std::string_view tmp_path, float* progress = nullptr, bool resume = false) const;
-	bool downloadZip2(std::string_view tmp_path, float* progress = nullptr, bool resume = false) const;
-	bool downloadZip3(std::string_view tmp_path, float* progress = nullptr, bool resume = false) const;
-	bool downloadZip4(std::string_view tmp_path, float* progress = nullptr, bool resume = false) const;
-	bool install(const std::string& pkg_path, const std::string& tmp_path);
-	bool install2(const std::string& pkg_path, const std::string& tmp_path);
-	bool install3(const std::string& pkg_path, const std::string& tmp_path);
-	bool install4(const std::string& pkg_path, const std::string& tmp_path);
+	bool downloadZip(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
+	bool downloadZip2(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
+	bool downloadZip3(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
+	bool downloadZip4(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
+	bool install(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 1, int zipTotal = 1);
+	bool install2(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 2, int zipTotal = 2);
+	bool install3(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 3, int zipTotal = 3);
+	bool install4(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 4, int zipTotal = 4);
 	bool remove(std::string_view pkg_path);
 	[[nodiscard]] const char* statusString() const;
 	[[nodiscard]] const char* statusStringDisplay() const;
