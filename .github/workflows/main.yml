@@ -26,7 +26,6 @@ jobs:
     - name: Inicializar submodules
       run: |
         git config --global --add safe.directory /__w/HbScene/HbScene
-        git submodule update --init --recursive libs/chesto
         git submodule update --init --recursive libs/librpxloader
     - if: matrix.platform == 'wii'
       name: Setup SDL2 Widescreen
