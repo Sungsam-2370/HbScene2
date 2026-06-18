@@ -12,6 +12,7 @@
 #include "../libs/get/src/Get.hpp"
 #include "../libs/get/src/Utils.hpp"
 
+#include "../libs/chesto/src/AlertDialog.hpp"
 #include "../libs/chesto/src/RootDisplay.hpp"
 
 #include "AppDetails.hpp"

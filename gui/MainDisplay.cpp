@@ -200,8 +200,8 @@ void MainDisplay::render(Element* parent)
 
 	renderBackground(true);
 
-	// Mostrar mensaje de advertencia sobre el splash si no paso la validacion
-	if (showingSplash && !gSwitchSceneValid)
+	// Mostrar mensaje de advertencia sobre el splash si no paso alguna validacion
+	if (showingSplash && (!gSwitchSceneValid || !gAtmosphereValid))
 	{
 		// Crear el texto solo una vez
 		if (!switchSceneWarning)
@@ -223,17 +223,22 @@ void MainDisplay::render(Element* parent)
 
 bool MainDisplay::process(InputEvents* event)
 {
-	if (!RootDisplay::subscreen && showingSplash && renderedSplash && event->noop)
+	// Mientras se muestra el splash, bloquear TODOS los inputs
+	// para que ningun boton cause error durante la carga inicial
+	if (!RootDisplay::subscreen && showingSplash && renderedSplash)
 	{
-		// Si no paso la validacion, esperar ~3 segundos antes de continuar
+		if (!event->noop)
+			return true; // consumir el evento sin procesarlo
+
+		// Si no paso alguna validacion, esperar ~7 segundos antes de continuar
 		// para que el usuario pueda leer el mensaje de advertencia
-		if (!gSwitchSceneValid)
+		if (!gSwitchSceneValid || !gAtmosphereValid)
 		{
 			splashWarningTimer += 16;
 			if (splashWarningTimer < 7000)
 				return true;
 
-			// Pasaron los 3 segundos: limpiar el mensaje y continuar
+			// Pasaron los 7 segundos: limpiar el mensaje y continuar
 			if (switchSceneWarning)
 			{
 				super::remove(switchSceneWarning);
