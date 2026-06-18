@@ -108,6 +108,8 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	super::append(&details);
 
 	// the scrollable portion of the app details page
+	// se posiciona despues del sidebar para no taparlo
+	content.position(appList->x, 0);
 	super::append(&content);
 
 	super::append(&download);
@@ -415,13 +417,24 @@ void AppDetails::render(Element* parent)
 	if (this->parent == NULL)
 		this->parent = parent;
 
-	// draw background solo en el area de contenido, sin tapar el sidebar
 	int sidebarW = appList->x;
-	CST_Rect dimens = { sidebarW, 0, SCREEN_WIDTH - sidebarW, SCREEN_HEIGHT };
-	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
-	CST_FillRect(RootDisplay::renderer, &dimens);
 
+	// 1. Fondo del panel izquierdo de contenido (entre el sidebar y el panel derecho)
+	CST_Rect contentDimens = { sidebarW, 0, (SCREEN_WIDTH - 340) - sidebarW, SCREEN_HEIGHT };
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
+	CST_FillRect(RootDisplay::renderer, &contentDimens);
+
+	// 2. Fondo del panel derecho (detalles: autor, version, tamaño, botones)
+	// usa el color del sidebar para diferenciarse visualmente del panel de contenido
+	CST_Rect rightPanelDimens = { SCREEN_WIDTH - 340, 0, 340, SCREEN_HEIGHT };
+	CST_Color rightPanelColor = {
+		HBAS::ThemeManager::sidebarColor.r,
+		HBAS::ThemeManager::sidebarColor.g,
+		HBAS::ThemeManager::sidebarColor.b,
+		0xff
+	};
+	CST_SetDrawColor(RootDisplay::renderer, rightPanelColor);
+	CST_FillRect(RootDisplay::renderer, &rightPanelDimens);
 
 	// draw all elements
 	super::render(parent);
