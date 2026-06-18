@@ -2,6 +2,7 @@
 #include "Container.hpp"
 #include "Constraint.hpp"
 #include "Button.hpp"
+#include "DrawUtils.hpp"
 
 AlertDialog::AlertDialog(const std::string& title, const std::string& message)
     : title(title), message(message)
@@ -37,8 +38,8 @@ AlertDialog::AlertDialog(const std::string& title, const std::string& message)
     messageText->constrain(ALIGN_CENTER_HORIZONTAL, 0);
     okButton->constrain(ALIGN_CENTER_HORIZONTAL, 0);
 
-    // prompt background color
-    vStack->backgroundColor = fromRGB(0xdd, 0xdd, 0xdd);
+    // fondo blanco opaco
+    vStack->backgroundColor = fromRGB(0xff, 0xff, 0xff);
     vStack->hasBackground = true;
     vStack->cornerRadius = 15;
     vStack->width = dialogWidth;
@@ -75,14 +76,14 @@ void AlertDialog::show() {
     if (useAnimation) {
         // start animation
         animate(250, [this](float progress) {
-            // on step
-            this->vStack->width = (dialogWidth * progress);
-            this->vStack->height = (dialogHeight * progress);
-            this->overlay->backgroundOpacity = (int)(0x80 * progress);
+            // solo animar tamaño, overlay siempre transparente
+            this->vStack->width = (int)(dialogWidth * progress);
+            this->vStack->height = (int)(dialogHeight * progress);
+            this->overlay->backgroundOpacity = 0x00;
         }, [this]() {
             this->vStack->width = dialogWidth;
             this->vStack->height = dialogHeight;
-            this->overlay->backgroundOpacity = 0x80;
+            this->overlay->backgroundOpacity = 0x00;
         });
         return;
     }
@@ -95,8 +96,21 @@ void AlertDialog::show() {
 }
 
 void AlertDialog::render(Element* parent) {
-    // Implementation for rendering the dialog
-    super::render(this);
+    // Renderizar siempre al frente encima de todos los demas elementos
+    Element* target = (parent && parent != this) ? parent : this;
+    overlay->render(target);
+
+    // Borde negro alrededor del cuadro
+    if (!hidden) {
+        int bx = vStack->x - 2;
+        int by = vStack->y - 2;
+        int bw = vStack->width + 4;
+        int bh = vStack->height + 4;
+        CST_Color borderColor = { 0x00, 0x00, 0x00, 0xff };
+        CST_SetDrawColor(RootDisplay::renderer, borderColor);
+        CST_Rect borderRect = { bx, by, bw, bh };
+        CST_DrawRect(RootDisplay::renderer, &borderRect);
+    }
 }
 
 bool AlertDialog::process(InputEvents* event) {

@@ -256,6 +256,18 @@ void Sidebar::render(Element* parent)
   // no sidebar on 3ds
   return;
 #endif
+	// Dibujar siempre el fondo del sidebar con sidebarColor
+	// para que sea visible cuando AppDetails este abierto como subscreen
+	CST_Rect sidebarBg = { 0, 0, width, SCREEN_HEIGHT };
+	CST_Color sidebarBgColor = {
+		HBAS::ThemeManager::sidebarColor.r,
+		HBAS::ThemeManager::sidebarColor.g,
+		HBAS::ThemeManager::sidebarColor.b,
+		0xff
+	};
+	CST_SetDrawColor(RootDisplay::renderer, sidebarBgColor);
+	CST_FillRect(RootDisplay::renderer, &sidebarBg);
+
 	// The Y where the category list begins (below the logo/title area)
 	const int catAreaTop = 130/SCALER;
 
