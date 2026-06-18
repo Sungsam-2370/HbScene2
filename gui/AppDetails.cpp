@@ -415,13 +415,22 @@ void AppDetails::render(Element* parent)
 	if (this->parent == NULL)
 		this->parent = parent;
 
-	// draw background - empieza despues del sidebar (360px) para no taparlo
-	CST_Rect dimens = { 360, 0, SCREEN_WIDTH - 360, SCREEN_HEIGHT };
+	// Dibujar fondo del sidebar con su color correcto
+	int sidebarW = appList->x;
+	CST_Rect sidebarDimens = { 0, 0, sidebarW, SCREEN_HEIGHT };
+	CST_Color sidebarCol = {
+		HBAS::ThemeManager::sidebarColor.r,
+		HBAS::ThemeManager::sidebarColor.g,
+		HBAS::ThemeManager::sidebarColor.b,
+		0xff
+	};
+	CST_SetDrawColor(RootDisplay::renderer, sidebarCol);
+	CST_FillRect(RootDisplay::renderer, &sidebarDimens);
 
+	// Dibujar fondo del area de contenido
+	CST_Rect dimens = { sidebarW, 0, SCREEN_WIDTH - sidebarW, SCREEN_HEIGHT };
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
 	CST_FillRect(RootDisplay::renderer, &dimens);
-
-	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
 
 	// draw all elements
 	super::render(parent);

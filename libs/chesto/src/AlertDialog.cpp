@@ -96,22 +96,22 @@ void AlertDialog::show() {
 }
 
 void AlertDialog::render(Element* parent) {
+    // No renderizar nada si esta oculto
+    if (hidden) return;
+
     // Renderizar siempre al frente usando RootDisplay como target
     // para que aparezca encima de todos los elementos incluyendo subscreens
-    Element* target = RootDisplay::mainDisplay;
-    overlay->render(target);
+    overlay->render(RootDisplay::mainDisplay);
 
     // Borde negro alrededor del cuadro
-    if (!hidden) {
-        int bx = vStack->x - 2;
-        int by = vStack->y - 2;
-        int bw = vStack->width + 4;
-        int bh = vStack->height + 4;
-        CST_Color borderColor = { 0x00, 0x00, 0x00, 0xff };
-        CST_SetDrawColor(RootDisplay::renderer, borderColor);
-        CST_Rect borderRect = { bx, by, bw, bh };
-        CST_DrawRect(RootDisplay::renderer, &borderRect);
-    }
+    int bx = vStack->x - 2;
+    int by = vStack->y - 2;
+    int bw = vStack->width + 4;
+    int bh = vStack->height + 4;
+    CST_Color borderColor = { 0x00, 0x00, 0x00, 0xff };
+    CST_SetDrawColor(RootDisplay::renderer, borderColor);
+    CST_Rect borderRect = { bx, by, bw, bh };
+    CST_DrawRect(RootDisplay::renderer, &borderRect);
 }
 
 bool AlertDialog::process(InputEvents* event) {
