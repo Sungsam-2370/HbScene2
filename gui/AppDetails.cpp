@@ -415,9 +415,18 @@ void AppDetails::render(Element* parent)
 	if (this->parent == NULL)
 		this->parent = parent;
 
-	// Dibujar fondo del sidebar con su color correcto
-	// sidebar->width es el ancho real calculado por AppList
+	// Calcular ancho real del sidebar
 	int sidebarW = appList->sidebar->width + 35;
+
+	// 1. Dibujar fondo completo de la pantalla primero
+	CST_Rect fullScreen = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
+	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
+	CST_FillRect(RootDisplay::renderer, &fullScreen);
+
+	// 2. Renderizar todo el contenido de AppDetails encima
+	super::render(parent);
+
+	// 3. Renderizar el sidebar encima de todo para que siempre sea visible
 	CST_Rect sidebarDimens = { 0, 0, sidebarW, SCREEN_HEIGHT };
 	CST_Color sidebarCol = {
 		HBAS::ThemeManager::sidebarColor.r,
@@ -428,13 +437,8 @@ void AppDetails::render(Element* parent)
 	CST_SetDrawColor(RootDisplay::renderer, sidebarCol);
 	CST_FillRect(RootDisplay::renderer, &sidebarDimens);
 
-	// Dibujar fondo del area de contenido (desde el borde del sidebar hasta el fin de pantalla)
-	CST_Rect dimens = { sidebarW, 0, SCREEN_WIDTH - sidebarW, SCREEN_HEIGHT };
-	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::background);
-	CST_FillRect(RootDisplay::renderer, &dimens);
-
-	// draw all elements
-	super::render(parent);
+	// 4. Renderizar el sidebar con sus iconos y texto encima del fondo
+	appList->sidebar->render(parent);
 }
 
 int AppDetails::updatePopupStatus(int status, int num, int num_total)
