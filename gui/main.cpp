@@ -40,17 +40,15 @@
 #include "main.hpp"
 
 // ---------------------------------------------------------------------------
-// Switch Scene validation
-// Verifica si el usuario tiene instalado el PkUnico de Switch Scene
-// comprobando la existencia de: sdmc:/config/switch-scene/Overlays
+// Switch Scene validation - DESACTIVADA
+// Se mantiene la variable para no romper otras partes del codigo que la usan,
+// pero siempre retorna true. La unica validacion activa es la del hash.
 // ---------------------------------------------------------------------------
 bool gSwitchSceneValid = false;
 
 static bool checkSwitchScene()
 {
-	struct stat st;
-	return (stat("sdmc:/config/switch-scene/Overlays", &st) == 0
-	        && S_ISDIR(st.st_mode));
+	return true; // validacion de carpeta desactivada
 }
 // ---------------------------------------------------------------------------
 

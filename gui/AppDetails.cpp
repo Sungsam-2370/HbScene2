@@ -34,6 +34,7 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	, details(getPackageDetails(&package).c_str(), 20 / SCALER, &white, false, 300)
 	, content(&package, appList->useBannerIcons)
 	, downloadStatus(i18n("details.status"), 30 / SCALER, &white)
+	, downloadPercent("0%", 24 / SCALER, &white)
 {
 	// TODO: show current app status somewhere
 
@@ -120,6 +121,10 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 
 	// download informations (not visible until the download is started)
 	downloadStatus.position(SCREEN_WIDTH / 2 - downloadProgress.width / 2, PANE_WIDTH / 2 - 70 / SCALER);
+
+	// contador de porcentaje, centrado, debajo de la barra de progreso
+	downloadPercent.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 15 / SCALER);
+	downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
 }
 
 AppDetails::~AppDetails()
@@ -179,6 +184,7 @@ void AppDetails::proceed()
 	// description of what we're doing
 	super::append(&downloadProgress);
 	super::append(&downloadStatus);
+	super::append(&downloadPercent);
 
 	// setup progress bar callback
 	networking_callback = AppDetails::updateCurrentlyDisplayedPopup;
@@ -459,7 +465,7 @@ int AppDetails::updatePopupStatus(int status, int num, int num_total)
 		if (status < 0 || status >= 5) return 0;
 		std::string statuses[6] = {
 			i18n("details.download.verb") + " ",
-			i18n("details.install.verb") + " ",
+			"Extrayendo ",
 			i18n("details.remove.verb") + " ",
 			i18n("details.reloading"),
 			i18n("details.syncing") + " ",
@@ -505,6 +511,14 @@ int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 	if (popup != NULL)
 	{
 		popup->downloadProgress.percent = amount;
+
+		// actualizar el texto del porcentaje (0-100%)
+		int percentInt = (int)(amount * 100);
+		if (percentInt < 0) percentInt = 0;
+		if (percentInt > 100) percentInt = 100;
+		popup->downloadPercent.setText(std::to_string(percentInt) + "%");
+		popup->downloadPercent.update();
+		popup->downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
 
 		// force render the element right here (and it's progress bar too)
 		if (popup->parent != NULL)
