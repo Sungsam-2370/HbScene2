@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 
 // the meta-repo can be used to change or add more repos
 // #define   META_REPO "https://meta.fortheusers.org"
@@ -35,3 +36,4 @@ extern bool gSwitchSceneValid;
 // true  = sd:atmosphere/package3 existe y su SHA-256 coincide con el esperado
 // false = archivo no encontrado o hash incorrecto → descargas bloqueadas
 extern bool gAtmosphereValid;
+extern std::string gAtmosphereDebugMsg;

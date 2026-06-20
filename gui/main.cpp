@@ -174,12 +174,17 @@ static std::string computeFileHash(const char* filePath)
 	return std::string(hex);
 }
 
+// Mensaje de depuracion visible en pantalla, indica exactamente en que paso
+// fallo la validacion del hash, para diagnosticar sin herramientas externas
+std::string gAtmosphereDebugMsg = "";
+
 static bool checkAtmosphereHash()
 {
 	// 1. Calcular el hash del archivo local
 	const std::string localHash = computeFileHash("sdmc:/atmosphere/package3");
 	if (localHash.empty())
 	{
+		gAtmosphereDebugMsg = "package3 no encontrado en sdmc:/atmosphere/";
 		std::cout << "[AtmHash] sdmc:/atmosphere/package3 no encontrado" << std::endl;
 		return false;
 	}
@@ -190,6 +195,7 @@ static bool checkAtmosphereHash()
 	const std::string url = std::string(SWITCH_REPO) + "/valido.json";
 	if (!downloadFileToMemory(url, &jsonData))
 	{
+		gAtmosphereDebugMsg = "No se pudo descargar valido.json (revisa conexion a internet). Hash local: " + localHash.substr(0, 16) + "...";
 		std::cout << "[AtmHash] No se pudo descargar valido.json" << std::endl;
 		return false;
 	}
@@ -200,6 +206,7 @@ static bool checkAtmosphereHash()
 
 	if (doc.HasParseError() || !doc.IsObject() || !doc.HasMember("hashes") || !doc["hashes"].IsArray())
 	{
+		gAtmosphereDebugMsg = "valido.json descargado pero con formato invalido (" + std::to_string(jsonData.size()) + " bytes)";
 		std::cout << "[AtmHash] valido.json con formato incorrecto" << std::endl;
 		return false;
 	}
@@ -213,11 +220,13 @@ static bool checkAtmosphereHash()
 
 		if (localHash == hashes[i].GetString())
 		{
+			gAtmosphereDebugMsg = "Hash valido (coincide con entrada " + std::to_string(i) + ")";
 			std::cout << "[AtmHash] Hash válido encontrado (índice " << i << ")" << std::endl;
 			return true;
 		}
 	}
 
+	gAtmosphereDebugMsg = "Hash local (" + localHash.substr(0, 16) + "...) no coincide con " + std::to_string(hashes.Size()) + " hash(es) en valido.json";
 	std::cout << "[AtmHash] Hash no encontrado en la lista de válidos" << std::endl;
 	return false;
 }
