@@ -12,6 +12,7 @@
 
 #include "MainDisplay.hpp"
 #include "ThemeManager.hpp"
+#include "ThemeScreen.hpp"
 #include "main.hpp"
 // gSwitchSceneValid definido en main.cpp, declarado en main.hpp
 
@@ -198,6 +199,10 @@ void MainDisplay::render(Element* parent)
 	if (showingSplash)
 		renderedSplash = true;
 
+	// Refrescar el color de fondo segun el tema actualmente activo,
+	// para que un cambio de tema se vea reflejado de inmediato
+	updateSidebarColor();
+
 	renderBackground(true);
 
 	// Mostrar mensaje de advertencia sobre el splash si no paso alguna validacion
@@ -358,6 +363,14 @@ bool MainDisplay::process(InputEvents* event)
 	// TODO: have a more generalized way to have a view describe what needs redrawing
 	if (needsRedraw)
 		appList.update();
+
+	// Abrir la pantalla de temas con el boton R, solo si no hay otro subscreen activo
+	// (por ejemplo, no debe abrirse mientras se esta viendo AppDetails)
+	if (!RootDisplay::subscreen && event->pressed(R_BUTTON))
+	{
+		RootDisplay::switchSubscreen(new ThemeScreen());
+		return true;
+	}
 
 	return RootDisplay::process(event) || true;
 }

@@ -13,6 +13,7 @@
 #include "../libs/get/src/Utils.hpp"
 
 #include "../libs/chesto/src/RootDisplay.hpp"
+#include "../libs/chesto/src/Constraint.hpp"
 
 #include "AppDetails.hpp"
 #include "AppList.hpp"

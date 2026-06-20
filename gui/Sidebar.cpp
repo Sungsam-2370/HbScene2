@@ -258,6 +258,24 @@ void Sidebar::render(Element* parent)
 #endif
 	// The Y where the category list begins (below the logo/title area)
 	const int catAreaTop = 130/SCALER;
+	const int hintAreaHeightForSections = 55/SCALER;
+	const int footerTopY = SCREEN_HEIGHT - hintAreaHeightForSections;
+
+	// --- Dibujar las 3 secciones del sidebar con sus colores independientes ---
+	// Seccion superior: titulo/logo (0 hasta donde empiezan las categorias)
+	CST_Rect titleSectionRect = { 0, 0, width, catAreaTop };
+	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarTitleBg);
+	CST_FillRect(RootDisplay::renderer, &titleSectionRect);
+
+	// Seccion media: categorias (entre el titulo y el footer)
+	CST_Rect categorySectionRect = { 0, catAreaTop, width, footerTopY - catAreaTop };
+	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarCategoryBg);
+	CST_FillRect(RootDisplay::renderer, &categorySectionRect);
+
+	// Seccion inferior: boton de expandir/contraer
+	CST_Rect footerSectionRect = { 0, footerTopY, width, hintAreaHeightForSections };
+	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarFooterBg);
+	CST_FillRect(RootDisplay::renderer, &footerSectionRect);
 
 	// --- Clip drawing to the category area so items don't overdraw the logo/title ---
 	const int hintAreaHeight = 55/SCALER;
@@ -265,9 +283,8 @@ void Sidebar::render(Element* parent)
 	SDL_RenderSetClipRect(RootDisplay::renderer, &clipRect);
 
 	// draw the background-colored rect behind the active category
-	// Use ThemeManager::background (the main app background, not the sidebar color)
-	auto& bg = HBAS::ThemeManager::background;
-	CST_Color consoleColor = { bg.r, bg.g, bg.b, 0xff };
+	// Usa el color de resaltado de categoria del tema activo (personalizable)
+	CST_Color consoleColor = HBAS::ThemeManager::categoryHighlight;
 
 	CST_Rect dimens = { 0, 0, width, (int)(60/SCALER) }; // TODO: extract this to a method too
 	dimens.y = 150/SCALER + this->curCategory * 70/SCALER - 15 / SCALER - scrollOffset;					   // TODO: extract formula into method
@@ -282,8 +299,9 @@ void Sidebar::render(Element* parent)
 		CST_Rect dimens2 = { 0, 0, 400, 60 };
 		dimens.y = 150/SCALER + this->currentSelection * 70/SCALER - 15 / SCALER - scrollOffset;					   // TODO: extract formula into method
 		CST_SetDrawBlend(RootDisplay::renderer, true);
-		CST_Color highlight = { 0x10, 0xD9, 0xD9, 0x40 };
-		CST_SetDrawColor(RootDisplay::renderer, highlight); // TODO: matches the DEEP_HIGHLIGHT color
+		// Color del recuadro que se mueve al arrastrar (personalizable)
+		CST_Color highlight = HBAS::ThemeManager::dragHighlight;
+		CST_SetDrawColor(RootDisplay::renderer, highlight);
 		CST_FillRect(RootDisplay::renderer, &dimens2);
 	}
 
