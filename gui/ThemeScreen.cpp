@@ -39,22 +39,21 @@ void ThemeCard::render(Element* parent)
 		? HBAS::ThemeManager::customColors
 		: HBAS::ThemeManager::getPresetColors(themeId);
 
-	this->backgroundColor = preview.sidebarColor;
+	this->backgroundColor = fromRGB(preview.sidebarColor.r, preview.sidebarColor.g, preview.sidebarColor.b);
 
 	// marco que indica seleccion: borde grueso de color resaltado
 	if (selected)
 	{
-		this->backgroundColor = preview.categoryHighlight;
+		this->backgroundColor = fromRGB(preview.categoryHighlight.r, preview.categoryHighlight.g, preview.categoryHighlight.b);
 	}
 
 	selectedText.hidden = !selected;
-	selectedText.color = &HBAS::ThemeManager::textPrimary;
 
-	// El texto del nombre del tema usa un color de contraste fijo (blanco/negro)
+	// El texto del nombre del tema usa un color de contraste fijo (blanco)
 	// para que sea legible sin importar el color de fondo de la tarjeta
 	static CST_Color white = {0xff, 0xff, 0xff, 0xff};
-	nameText.color = &white;
-	selectedText.color = &white;
+	nameText.setColor(white);
+	selectedText.setColor(white);
 
 	super::render(parent);
 
