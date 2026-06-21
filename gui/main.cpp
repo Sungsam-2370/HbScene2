@@ -11,7 +11,6 @@
 // And starting the Fat FS
 #include "SDL2/SDL_main.h"
 #include "../libs/chesto/src/DrawUtils.hpp"
-#include "../libs/chesto/libs/resinfs/include/romfs-wiiu.h"
 #include <ogc/system.h>
 #endif
 
@@ -29,6 +28,7 @@
 #endif
 
 #include <sys/stat.h>
+#include "../libs/chesto/libs/resinfs/include/romfs-wiiu.h"
 
 #include "../libs/get/src/Get.hpp"
 #include "../libs/get/src/Utils.hpp"
