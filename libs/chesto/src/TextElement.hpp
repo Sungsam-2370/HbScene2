@@ -33,6 +33,12 @@ public:
 
 	/// update TextElement with changes
 	void update(bool forceUpdate = false);
+
+	const std::string& getText() const
+	{
+		return text;
+	}
+
 	std::string text = "";
 
 	// if specified, will override any font_type setting
