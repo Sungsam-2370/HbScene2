@@ -14,9 +14,35 @@
 #include "./repos/LocalRepo.hpp"
 #include "Utils.hpp"
 
+#ifdef SWITCH
+#include <switch.h>
+#endif
+
 using namespace rapidjson;
 
 bool debug = false;
+
+// ---------------------------------------------------------------------------
+// Evita que la consola entre en modo de espera/hibernacion mientras dura
+// una descarga o instalacion. Se desactiva el auto-sleep al crear el objeto
+// y se reactiva automaticamente al destruirse (sin importar por que salida
+// de la funcion ocurra: exito, error temprano, o excepcion).
+// ---------------------------------------------------------------------------
+struct NoSleepGuard
+{
+	NoSleepGuard()
+	{
+#ifdef SWITCH
+		appletSetAutoSleepDisabled(true);
+#endif
+	}
+	~NoSleepGuard()
+	{
+#ifdef SWITCH
+		appletSetAutoSleepDisabled(false);
+#endif
+	}
+};
 
 Get::Get(
 	std::string_view config_dir,
@@ -47,6 +73,11 @@ Get::Get(
 
 int Get::install(Package& package, bool resume)
 {
+	// Evitar que la consola entre en reposo/hibernacion mientras dura
+	// toda la descarga e instalacion (se reactiva automaticamente al
+	// salir de esta funcion, sin importar el camino de salida)
+	NoSleepGuard noSleepGuard;
+
 	// calcular cuantos zips existen en total para este paquete (1 a 4)
 	int zipTotal = 1;
 	if (!package.zipUrl2.empty()) zipTotal++;

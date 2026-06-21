@@ -191,11 +191,37 @@ static bool checkAtmosphereHash()
 	std::cout << "[AtmHash] Hash local: " << localHash << std::endl;
 
 	// 2. Descargar la lista de hashes válidos desde el repositorio
+	// Se reintenta varias veces con espera entre intentos, porque al
+	// arrancar la consola la conexion WiFi puede tardar unos segundos
+	// en quedar lista despues de init_networking()
 	std::string jsonData;
 	const std::string url = std::string(SWITCH_REPO) + "/valido.json";
-	if (!downloadFileToMemory(url, &jsonData))
+
+	bool downloaded = false;
+	const int maxAttempts = 6;
+	for (int attempt = 1; attempt <= maxAttempts; attempt++)
 	{
-		gAtmosphereDebugMsg = "No se pudo descargar valido.json (revisa conexion a internet). Hash local: " + localHash.substr(0, 16) + "...";
+		jsonData.clear();
+		if (downloadFileToMemory(url, &jsonData))
+		{
+			downloaded = true;
+			break;
+		}
+		std::cout << "[AtmHash] Intento " << attempt << "/" << maxAttempts
+		          << " fallo, reintentando..." << std::endl;
+
+		// esperar antes de reintentar (500ms), dando tiempo a que la red
+		// termine de inicializarse en segundo plano
+#if defined(SWITCH)
+		svcSleepThread(500'000'000ULL); // 500 ms, en nanosegundos
+#else
+		usleep(500 * 1000); // 500 ms
+#endif
+	}
+
+	if (!downloaded)
+	{
+		gAtmosphereDebugMsg = "No se pudo descargar valido.json tras " + std::to_string(maxAttempts) + " intentos (revisa conexion a internet). Hash local: " + localHash.substr(0, 16) + "...";
 		std::cout << "[AtmHash] No se pudo descargar valido.json" << std::endl;
 		return false;
 	}
