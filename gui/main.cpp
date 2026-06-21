@@ -11,6 +11,7 @@
 // And starting the Fat FS
 #include "SDL2/SDL_main.h"
 #include "../libs/chesto/src/DrawUtils.hpp"
+#include "../libs/chesto/libs/resinfs/include/romfs-wiiu.h"
 #include <ogc/system.h>
 #endif
 
@@ -310,6 +311,16 @@ int main(int argc, char* argv[])
 #if defined(SWITCH)
     chdir("sdmc:/switch/scene_eshop");
 #endif
+
+	// Inicializar el RomFS (resin:/) ANTES de cualquier cosa que necesite
+	// leer archivos empaquetados (como res/cacert.pem para validar SSL).
+	// Normalmente esto ocurre dentro del constructor de RootDisplay/MainDisplay,
+	// pero checkAtmosphereHash() se ejecuta antes de crear MainDisplay,
+	// asi que sin esto el filesystem "resin:/" todavia no existe.
+#if defined(USE_RAMFS)
+	ramfsInit();
+#endif
+
 	init_networking();
 	setUserAgent("HBAS/" APP_VERSION " (" PLATFORM "; Chesto)");
 	HBAS::ThemeManager::themeManagerInit();
