@@ -41,12 +41,8 @@ void ThemeCard::render(Element* parent)
 
 	this->backgroundColor = fromRGB(preview.sidebarColor.r, preview.sidebarColor.g, preview.sidebarColor.b);
 
-	// marco que indica seleccion: borde grueso de color resaltado
-	if (selected)
-	{
-		this->backgroundColor = fromRGB(preview.categoryHighlight.r, preview.categoryHighlight.g, preview.categoryHighlight.b);
-	}
-
+	// El texto "Seleccionado" solo se muestra en el tema activo del sistema,
+	// independientemente de donde este el cursor de navegacion
 	selectedText.hidden = !selected;
 
 	// El texto del nombre del tema usa un color de contraste fijo (blanco)
@@ -57,15 +53,24 @@ void ThemeCard::render(Element* parent)
 
 	super::render(parent);
 
-	// dibujar un borde extra cuando esta seleccionada, para destacarla mas
+	// Borde verde fino: marca permanente del tema activo
 	if (selected)
 	{
-		CST_Color borderColor = {0xff, 0xff, 0xff, 0xff};
-		CST_SetDrawColor(RootDisplay::renderer, borderColor);
+		CST_Color activeBorder = {0x00, 0xff, 0x80, 0xff};
+		CST_SetDrawColor(RootDisplay::renderer, activeBorder);
+		CST_Rect activeBorderRect = { this->x - 2, this->y - 2, this->width + 4, this->height + 4 };
+		CST_DrawRect(RootDisplay::renderer, &activeBorderRect);
+	}
+
+	// Borde blanco grueso: posicion actual del cursor de navegacion
+	if (cursorHere)
+	{
+		CST_Color cursorBorder = {0xff, 0xff, 0xff, 0xff};
+		CST_SetDrawColor(RootDisplay::renderer, cursorBorder);
 		for (int i = 0; i < 3; i++)
 		{
-			CST_Rect borderRect = { this->x - i, this->y - i, this->width + i * 2, this->height + i * 2 };
-			CST_DrawRect(RootDisplay::renderer, &borderRect);
+			CST_Rect cursorRect = { this->x - i - 4, this->y - i - 4, this->width + (i + 4) * 2, this->height + (i + 4) * 2 };
+			CST_DrawRect(RootDisplay::renderer, &cursorRect);
 		}
 	}
 }
@@ -119,11 +124,13 @@ ThemeScreen::ThemeScreen()
 		cards.push_back(card);
 	}
 
-	// marcar la tarjeta del tema actualmente activo como seleccionada
+	// marcar la tarjeta del tema actualmente activo (permanente, no cambia con el cursor)
+	// y posicionar el cursor de navegacion sobre esa misma tarjeta al iniciar
 	highlighted = HBAS::ThemeManager::currentTheme;
 	if (highlighted < 0 || highlighted >= (int)cards.size())
 		highlighted = 0;
 	cards[highlighted]->selected = true;
+	cards[highlighted]->cursorHere = true;
 }
 
 ThemeScreen::~ThemeScreen()
@@ -172,8 +179,8 @@ bool ThemeScreen::process(InputEvents* event)
 
 	if (prevHighlighted != highlighted)
 	{
-		cards[prevHighlighted]->selected = false;
-		cards[highlighted]->selected = true;
+		cards[prevHighlighted]->cursorHere = false;
+		cards[highlighted]->cursorHere = true;
 	}
 
 	return super::process(event);
@@ -198,7 +205,6 @@ void ThemeScreen::selectCard(int index)
 	for (auto card : cards)
 		card->selected = false;
 	cards[index]->selected = true;
-	highlighted = index;
 }
 
 void ThemeScreen::back()

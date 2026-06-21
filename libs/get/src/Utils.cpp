@@ -90,6 +90,7 @@ static int libget_curl_progress_wrapper(void* /*clientp*/, double dltotal, doubl
 // reference to the curl handle so that we can re-use the connection
 #ifndef NETWORK_MOCK
 CURL* curl = nullptr;
+std::string gLastCurlErrorMsg = "";
 #endif
 
 #define SOCU_ALIGN 0x1000
@@ -326,8 +327,19 @@ bool downloadFileCommon(const std::string& path, std::string* buffer = nullptr, 
 	else
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, data_struct);
 
-	bool success = curl_easy_perform(curl) == CURLE_OK;
-	
+	CURLcode curlResult = curl_easy_perform(curl);
+	bool success = (curlResult == CURLE_OK);
+
+	if (!success)
+	{
+		gLastCurlErrorMsg = curl_easy_strerror(curlResult);
+		printf("[downloadFileCommon] curl error: %s\n", gLastCurlErrorMsg.c_str());
+	}
+	else
+	{
+		gLastCurlErrorMsg.clear();
+	}
+
 	resetCurlToCleanState(curl);
 	
 	return success;

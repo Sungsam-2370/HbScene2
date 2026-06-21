@@ -198,7 +198,7 @@ static bool checkAtmosphereHash()
 	const std::string url = std::string(SWITCH_REPO) + "/valido.json";
 
 	bool downloaded = false;
-	const int maxAttempts = 6;
+	const int maxAttempts = 10;
 	for (int attempt = 1; attempt <= maxAttempts; attempt++)
 	{
 		jsonData.clear();
@@ -208,21 +208,22 @@ static bool checkAtmosphereHash()
 			break;
 		}
 		std::cout << "[AtmHash] Intento " << attempt << "/" << maxAttempts
-		          << " fallo, reintentando..." << std::endl;
+		          << " fallo (" << gLastCurlErrorMsg << "), reintentando..." << std::endl;
 
-		// esperar antes de reintentar (500ms), dando tiempo a que la red
+		// esperar antes de reintentar (1 segundo), dando tiempo a que la red
 		// termine de inicializarse en segundo plano
 #if defined(SWITCH)
-		svcSleepThread(500'000'000ULL); // 500 ms, en nanosegundos
+		svcSleepThread(1'000'000'000ULL); // 1 segundo, en nanosegundos
 #else
-		usleep(500 * 1000); // 500 ms
+		usleep(1000 * 1000); // 1 segundo
 #endif
 	}
 
 	if (!downloaded)
 	{
-		gAtmosphereDebugMsg = "No se pudo descargar valido.json tras " + std::to_string(maxAttempts) + " intentos (revisa conexion a internet). Hash local: " + localHash.substr(0, 16) + "...";
-		std::cout << "[AtmHash] No se pudo descargar valido.json" << std::endl;
+		std::string curlDetail = gLastCurlErrorMsg.empty() ? "sin detalle" : gLastCurlErrorMsg;
+		gAtmosphereDebugMsg = "No se pudo descargar valido.json tras " + std::to_string(maxAttempts) + " intentos. Error: " + curlDetail + ". URL: " + url;
+		std::cout << "[AtmHash] No se pudo descargar valido.json. Ultimo error: " << curlDetail << std::endl;
 		return false;
 	}
 

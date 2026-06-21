@@ -42,6 +42,9 @@ bool CreateSubfolder(std::string_view path);
 int init_networking();
 int deinit_networking();
 bool downloadFileToMemory(const std::string& path, std::string* buffer);				// writes to disk in BUF_SIZE chunks.
+
+// Guarda el ultimo error de curl en texto legible, para diagnostico en pantalla
+extern std::string gLastCurlErrorMsg;
 bool downloadFileToDisk(const std::string& remote_path, const std::string& local_path, bool resume = false); // saves file to local_path, optionally resuming
 bool downloadFileToDiskWithMetadata(const std::string& remote_path, const std::string& local_path, bool resume, download_metadata_t* metadata);
 bool getRemoteFileMetadata(const std::string& remote_path, download_metadata_t* metadata); // performs HEAD request to get metadata

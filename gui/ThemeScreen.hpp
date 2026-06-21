@@ -17,7 +17,8 @@ public:
 	bool process(InputEvents* event);
 
 	int themeId;
-	bool selected = false;
+	bool selected = false;   // true solo si este es el tema activo en el sistema
+	bool cursorHere = false; // true si el cursor de navegacion esta sobre esta tarjeta
 
 private:
 	TextElement nameText;

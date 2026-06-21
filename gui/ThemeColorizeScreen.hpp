@@ -6,10 +6,10 @@
 #include "../libs/chesto/src/Button.hpp"
 #include "ThemeManager.hpp"
 
-// Pantalla de personalizacion de colores del tema "Personalizado"
-// Permite ajustar cada componente R/G/B de cada color disponible
-// usando izquierda/derecha para cambiar el valor y arriba/abajo
-// para moverse entre los colores y sus componentes.
+// Pantalla de personalizacion de colores del tema "Personalizado".
+// Muestra solo la lista de categorias editables junto con un cuadro
+// de vista previa de cada color. Al presionar A sobre una fila, se
+// abre ColorPickerScreen para editar ese color especificamente.
 class ThemeColorizeScreen : public Element
 {
 public:
@@ -21,6 +21,7 @@ public:
 
 	void back();
 	void applyAndSave();
+	void openPickerForRow(int row);
 
 	// si es true, al volver (B o aplicar) regresa a una nueva instancia de
 	// ThemeScreen en vez de cerrar todo hacia el menu principal
@@ -36,19 +37,14 @@ private:
 
 	std::vector<ColorEntry> entries;
 
-	// fila seleccionada (0..entries.size()-1) y componente seleccionado (0=R,1=G,2=B,3=A)
+	// fila actualmente resaltada por el cursor de navegacion
 	int selectedRow = 0;
-	int selectedComponent = 0;
 
 	TextElement title;
 	TextElement hint;
 	std::vector<TextElement*> rowLabels;
-	std::vector<TextElement*> rowValues;
 
 	Button* applyButton = nullptr;
-
-	void refreshRowText(int row);
-	void adjustValue(int delta);
 
 	// vista previa del recuadro de color a la derecha de cada fila
 	void drawColorPreview(int row, int rowY);
