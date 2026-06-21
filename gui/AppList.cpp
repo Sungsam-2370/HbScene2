@@ -2,6 +2,7 @@
 #include "AboutScreen.hpp"
 #include "FeedbackCenter.hpp"
 #include "ThemeManager.hpp"
+#include "ThemeScreen.hpp"
 #include "main.hpp"
 
 #include "../libs/get/src/Utils.hpp"
@@ -45,6 +46,7 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	, muteIcon(RAMFS "res/mute.png")
 	, unmuteIcon(RAMFS "res/unmute.png")
 #endif
+	, themesBtn("Temas", R_BUTTON, false, 15)
 {
 	this->x = 400/SCALER - 260/SCALER * hideSidebar;
 	sidebar->width = this->x - 35/SCALER; // width of the sidebar is space between edge and applist
@@ -63,6 +65,14 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	// additional buttons
 	creditsBtn.action = std::bind(&AppList::launchSettings, this, false);
 	sortBtn.action = std::bind(&AppList::cycleSort, this);
+
+	// Abre la pantalla de temas. El boton fisico R tambien se maneja en
+	// MainDisplay::process; el guard de subscreen evita abrir dos veces
+	// si ambos detectan la pulsacion en el mismo frame.
+	themesBtn.action = []() {
+		if (!RootDisplay::subscreen)
+			RootDisplay::switchSubscreen(new ThemeScreen());
+	};
 	
 #if defined(MUSIC)
 	muteBtn.action = std::bind(&AppList::toggleAudio, this);
@@ -474,7 +484,19 @@ void AppList::update()
 			muteIcon.position(sortBtn.x - 35 - muteIcon.width, quitBtn.y + 5);
 			unmuteIcon.position(sortBtn.x - 35 - muteIcon.width, quitBtn.y + 5);
 			Mix_PausedMusic() ? super::append(&muteIcon) : super::append(&unmuteIcon);
+
+			// boton de temas, a la izquierda del boton de musica
+			themesBtn.position(muteBtn.x - 20 - themesBtn.width, quitBtn.y);
+			super::append(&themesBtn);
+		} else {
+			// sin musica cargada: el boton de temas va junto al de ordenar
+			themesBtn.position(sortBtn.x - 20 - themesBtn.width, quitBtn.y);
+			super::append(&themesBtn);
 		}
+#else
+		// build sin soporte de musica: el boton de temas va junto al de ordenar
+		themesBtn.position(sortBtn.x - 20 - themesBtn.width, quitBtn.y);
+		super::append(&themesBtn);
 #endif
 
 		// category text

@@ -11,7 +11,7 @@
 
 ThemeColorizeScreen::ThemeColorizeScreen()
 	: title("Personalizar colores", 32, &HBAS::ThemeManager::textPrimary)
-	, hint("Arriba/Abajo: cambiar fila   A: editar color   B: volver", 18, &HBAS::ThemeManager::textSecondary)
+	, hint("Arriba/Abajo: cambiar fila   A o Touch: editar color   B: volver", 18, &HBAS::ThemeManager::textSecondary)
 {
 	this->width = SCREEN_WIDTH;
 	this->height = SCREEN_HEIGHT;
@@ -136,6 +136,22 @@ bool ThemeColorizeScreen::process(InputEvents* event)
 	{
 		selectedRow = (selectedRow - 1 + totalFocusable) % totalFocusable;
 		return true;
+	}
+
+	// Touch: tocar una fila la selecciona y abre el editor directamente,
+	// igual que presionar A despues de navegar hasta ahi
+	if (event->isTouchUp())
+	{
+		for (size_t i = 0; i < entries.size(); i++)
+		{
+			int rowTop = ROW_START_Y + (int)i * ROW_HEIGHT - 8;
+			if (event->touchIn(ROW_X - 10, rowTop, 900, 42))
+			{
+				selectedRow = (int)i;
+				this->openPickerForRow((int)i);
+				return true;
+			}
+		}
 	}
 
 	return super::process(event);

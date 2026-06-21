@@ -62,6 +62,7 @@ private:
 	TextElement blueValue;
 
 	Button* doneButton = nullptr;
+	Button* confirmEditButton = nullptr; // boton visible para confirmar el texto durante la edicion
 
 	// cual campo esta actualmente en edicion (-1 = ninguno, la rueda/barra
 	// tienen el foco de navegacion normal)

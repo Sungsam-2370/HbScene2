@@ -13,7 +13,7 @@ ColorPickerScreen::ColorPickerScreen(const std::string& title, CST_Color initial
 	, currentColor(initialColor)
 	, onColorPicked(onColorPicked)
 	, titleText(title, 30, &HBAS::ThemeManager::textPrimary)
-	, hint("Flechas: mover/ajustar   A: editar campo   X: confirmar texto   B: volver", 16, &HBAS::ThemeManager::textSecondary)
+	, hint("Touch o flechas: mover/ajustar   A: editar campo   Toca \"Confirmar texto\" para aplicar   B: volver", 16, &HBAS::ThemeManager::textSecondary)
 	, hexLabel("Codigo Hex", 18, &HBAS::ThemeManager::textSecondary)
 	, hexValue("#000000", 22, &HBAS::ThemeManager::textPrimary)
 	, redLabel("Rojo (R)", 18, &HBAS::ThemeManager::textSecondary)
@@ -76,10 +76,18 @@ ColorPickerScreen::ColorPickerScreen(const std::string& title, CST_Color initial
 	// teclado en pantalla, oculto hasta que se edite un campo
 	keyboard = new EKeyboard(std::bind(&ColorPickerScreen::keyboardInputCallback, this));
 	keyboard->position(190, SCREEN_HEIGHT - 360);
-	keyboard->preventEnterAndTab = true; // Enter dispara X_BUTTON, lo usamos para confirmar el campo
+	keyboard->preventEnterAndTab = true;
 	keyboard->updateSize();
 	keyboard->hidden = true;
 	this->append(keyboard);
+
+	// boton visible para confirmar el texto escrito, ya que el teclado en
+	// pantalla de chesto no tiene una tecla "Enter" navegable con D-pad
+	confirmEditButton = new Button("Confirmar", 0, true, 18, 170);
+	confirmEditButton->position(1100, SCREEN_HEIGHT - 360 + 130);
+	confirmEditButton->action = std::bind(&ColorPickerScreen::finishEditingField, this);
+	confirmEditButton->hidden = true;
+	this->append(confirmEditButton);
 
 	refreshTexts();
 }
@@ -88,6 +96,7 @@ ColorPickerScreen::~ColorPickerScreen()
 {
 	if (wheelTexture) delete wheelTexture;
 	if (doneButton) delete doneButton;
+	if (confirmEditButton) delete confirmEditButton;
 	if (keyboard) delete keyboard;
 }
 
@@ -294,7 +303,16 @@ bool ColorPickerScreen::process(InputEvents* event)
 	// Si estamos editando un campo de texto, el teclado tiene el control total
 	if (editingField != EDIT_NONE)
 	{
-		// X (o Enter en teclado fisico, via preventEnterAndTab) confirma el campo
+		// Tocar el boton "Confirmar texto" aplica el valor escrito.
+		// Esta es la via principal, ya que el teclado en pantalla de
+		// chesto no tiene una tecla "Enter" navegable con D-pad.
+		if (event->isTouchUp() && event->touchIn(1100, SCREEN_HEIGHT - 360 + 130, 170, 50))
+		{
+			finishEditingField();
+			return true;
+		}
+
+		// X como atajo adicional, por si hay teclado fisico conectado
 		if (event->pressed(X_BUTTON))
 		{
 			finishEditingField();
@@ -305,6 +323,7 @@ bool ColorPickerScreen::process(InputEvents* event)
 		{
 			editingField = EDIT_NONE;
 			keyboard->hidden = true;
+			confirmEditButton->hidden = true;
 			return true;
 		}
 		return keyboard->process(event);
@@ -329,19 +348,47 @@ bool ColorPickerScreen::process(InputEvents* event)
 		return true;
 	}
 
-	// Navegacion entre los 7 elementos enfocables (wheel, valuebar, hex, r, g, b, done)
+	// Navegacion en cuadricula: fila 0 = [rueda, barra de valor] (uno al lado
+	// del otro), filas 1 a 5 = [hex, R, G, B, Listo] en una sola columna.
+	// Arriba/Abajo siempre cambia de fila. Izquierda/Derecha solo cambia
+	// entre rueda y barra cuando estamos en la fila 0; en las demas filas
+	// se usa como ajuste fino (no aplica aqui, son campos de texto).
 	if (event->pressed(DOWN_BUTTON))
 	{
-		focusIndex = (focusIndex + 1) % 7;
+		if (focusIndex == FOCUS_WHEEL || focusIndex == FOCUS_VALUEBAR)
+			focusIndex = FOCUS_HEX;
+		else
+			focusIndex = (focusIndex + 1 > FOCUS_DONE) ? FOCUS_WHEEL : focusIndex + 1;
 		return true;
 	}
 	if (event->pressed(UP_BUTTON))
 	{
-		focusIndex = (focusIndex - 1 + 7) % 7;
+		if (focusIndex == FOCUS_WHEEL || focusIndex == FOCUS_VALUEBAR)
+			focusIndex = FOCUS_DONE;
+		else if (focusIndex == FOCUS_HEX)
+			focusIndex = FOCUS_WHEEL;
+		else
+			focusIndex = focusIndex - 1;
 		return true;
 	}
 
-	// Ajuste fino con izquierda/derecha, segun que esta enfocado
+	// Izquierda/Derecha: en la fila de la rueda, cambia el foco entre
+	// rueda y barra de valor. En cualquiera de los dos, tambien ajusta
+	// el valor correspondiente (igual que antes).
+	if (focusIndex == FOCUS_WHEEL || focusIndex == FOCUS_VALUEBAR)
+	{
+		if (event->pressed(RIGHT_BUTTON) && focusIndex == FOCUS_WHEEL)
+		{
+			focusIndex = FOCUS_VALUEBAR;
+			return true;
+		}
+		if (event->pressed(LEFT_BUTTON) && focusIndex == FOCUS_VALUEBAR)
+		{
+			focusIndex = FOCUS_WHEEL;
+			return true;
+		}
+	}
+
 	if (focusIndex == FOCUS_WHEEL)
 	{
 		bool changed = false;
@@ -373,6 +420,75 @@ bool ColorPickerScreen::process(InputEvents* event)
 		}
 	}
 
+	// --- Touch: tocar la rueda mueve el matiz/saturacion directamente ---
+	if ((event->isTouchDrag() || event->isTouchDown()) &&
+	    event->touchIn(wheelX, wheelY, wheelSize, wheelSize))
+	{
+		focusIndex = FOCUS_WHEEL;
+
+		int radius = wheelSize / 2;
+		double dx = event->xPos - (wheelX + radius);
+		double dy = event->yPos - (wheelY + radius);
+		double dist = std::sqrt(dx * dx + dy * dy);
+
+		double angle = std::atan2(dy, dx) * 180.0 / M_PI;
+		if (angle < 0) angle += 360.0;
+
+		hue = angle;
+		sat = dist / (double)radius;
+		if (sat > 1.0) sat = 1.0;
+
+		updateFromHSV();
+		refreshTexts();
+		return true;
+	}
+
+	// --- Touch: tocar/arrastrar en la barra de valor ajusta la luminosidad ---
+	if ((event->isTouchDrag() || event->isTouchDown()) &&
+	    event->touchIn(valueBarX - 10, valueBarY, valueBarW + 20, valueBarH))
+	{
+		focusIndex = FOCUS_VALUEBAR;
+
+		double relativeY = event->yPos - valueBarY;
+		val = 1.0 - (relativeY / (double)valueBarH);
+		if (val < 0) val = 0;
+		if (val > 1) val = 1;
+
+		updateFromHSV();
+		refreshTexts();
+		return true;
+	}
+
+	// --- Touch: tocar un campo de texto lo enfoca y abre su edicion ---
+	if (event->isTouchUp())
+	{
+		struct TouchTarget { int focus; int x, y, w, h; };
+		TouchTarget targets[] = {
+			{ FOCUS_HEX, 660, 90,  220, 60 },
+			{ FOCUS_R,   660, 150, 220, 60 },
+			{ FOCUS_G,   660, 210, 220, 60 },
+			{ FOCUS_B,   660, 270, 220, 60 },
+		};
+
+		for (auto& t : targets)
+		{
+			if (event->touchIn(t.x, t.y, t.w, t.h))
+			{
+				focusIndex = t.focus;
+				startEditingField(t.focus - FOCUS_HEX);
+				return true;
+			}
+		}
+
+		// tocar el boton Listo lo activa directamente
+		if (event->touchIn(660, 350, 216, 56))
+		{
+			focusIndex = FOCUS_DONE;
+			this->confirm();
+			return true;
+		}
+	}
+
 	return super::process(event);
 }
 
@@ -381,6 +497,7 @@ void ColorPickerScreen::startEditingField(int field)
 	editingField = field;
 	keyboard->hidden = false;
 	keyboard->textInput.clear();
+	confirmEditButton->hidden = false;
 
 	// pre-cargar el valor actual en el teclado para que el usuario pueda
 	// editarlo en vez de escribirlo desde cero
@@ -454,6 +571,7 @@ void ColorPickerScreen::finishEditingField()
 	refreshTexts();
 	editingField = EDIT_NONE;
 	keyboard->hidden = true;
+	confirmEditButton->hidden = true;
 }
 
 void ColorPickerScreen::keyboardInputCallback()

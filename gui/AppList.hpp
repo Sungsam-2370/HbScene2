@@ -81,6 +81,7 @@ private:
 	Button muteBtn;
 	ImageElement muteIcon;
 	ImageElement unmuteIcon;
+	Button themesBtn;
 	std::vector<std::string> musicInfo;
 #endif
 
