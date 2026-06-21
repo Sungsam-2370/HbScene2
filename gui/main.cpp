@@ -197,6 +197,24 @@ static bool checkAtmosphereHash()
 	std::string jsonData;
 	const std::string url = std::string(SWITCH_REPO) + "/valido.json";
 
+	// Diagnostico extra: verificar si el certificado SSL realmente es
+	// accesible desde el RomFS en este momento, usando fopen directo
+	std::string cacertPath = std::string(RAMFS) + "res/cacert.pem";
+	FILE* cacertTest = fopen(cacertPath.c_str(), "rb");
+	std::string cacertStatus;
+	if (cacertTest)
+	{
+		fseek(cacertTest, 0, SEEK_END);
+		long cacertSize = ftell(cacertTest);
+		fclose(cacertTest);
+		cacertStatus = "OK (" + std::to_string(cacertSize) + " bytes) en " + cacertPath;
+	}
+	else
+	{
+		cacertStatus = "NO ACCESIBLE en " + cacertPath;
+	}
+	std::cout << "[AtmHash] Certificado SSL: " << cacertStatus << std::endl;
+
 	bool downloaded = false;
 	const int maxAttempts = 10;
 	for (int attempt = 1; attempt <= maxAttempts; attempt++)
@@ -222,7 +240,7 @@ static bool checkAtmosphereHash()
 	if (!downloaded)
 	{
 		std::string curlDetail = gLastCurlErrorMsg.empty() ? "sin detalle" : gLastCurlErrorMsg;
-		gAtmosphereDebugMsg = "No se pudo descargar valido.json tras " + std::to_string(maxAttempts) + " intentos. Error: " + curlDetail + ". URL: " + url;
+		gAtmosphereDebugMsg = "No se pudo descargar valido.json tras " + std::to_string(maxAttempts) + " intentos. Error: " + curlDetail + ". Cert: " + cacertStatus;
 		std::cout << "[AtmHash] No se pudo descargar valido.json. Ultimo error: " << curlDetail << std::endl;
 		return false;
 	}
