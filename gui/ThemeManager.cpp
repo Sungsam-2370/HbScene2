@@ -11,7 +11,7 @@
 #include <windows.h>
 #endif
 
-#define THEME_CONFIG_PATH "./.theme_config"
+#define THEME_CONFIG_PATH "./.theme_config_v2"
 
 namespace HBAS::ThemeManager
 {
@@ -26,6 +26,8 @@ namespace HBAS::ThemeManager
                 {0x03, 0x1D, 0x3A, 0xff}, // sidebarColor
                 {0xff, 0xff, 0xff, 0xff}, // textPrimary
                 {0xd0, 0xd0, 0xd0, 0xff}, // textSecondary
+                {0xff, 0xff, 0xff, 0xff}, // textCard
+                {0xe0, 0xe0, 0xe0, 0xff}, // textDescription
                 {0x03, 0x1D, 0x3A, 0xff}, // sidebarTitleBg
                 {0x03, 0x1D, 0x3A, 0xff}, // sidebarCategoryBg
                 {0x03, 0x1D, 0x3A, 0xff}, // sidebarFooterBg
@@ -36,13 +38,15 @@ namespace HBAS::ThemeManager
         case THEME_ESHOP1_LIGHT:
             // Estilo clasico Nintendo eShop, fondo claro
             return {
-                {0xF4, 0xF4, 0xF4, 0xff}, // background
-                {0xE6, 0x00, 0x12, 0xff}, // sidebarColor (rojo Nintendo)
+                {0xF6, 0xF6, 0xF6, 0xff}, // background
+                {0xFE, 0x7E, 0x01, 0xff}, // sidebarColor (rojo Nintendo)
                 {0x1A, 0x1A, 0x1A, 0xff}, // textPrimary
                 {0x60, 0x60, 0x60, 0xff}, // textSecondary
-                {0xE6, 0x00, 0x12, 0xff}, // sidebarTitleBg
-                {0xE6, 0x00, 0x12, 0xff}, // sidebarCategoryBg
-                {0xC4, 0x00, 0x0F, 0xff}, // sidebarFooterBg
+                {0x1A, 0x1A, 0x1A, 0xff}, // textCard
+                {0x2A, 0x2A, 0x2A, 0xff}, // textDescription
+                {0xFE, 0x7E, 0x01, 0xff}, // sidebarTitleBg
+                {0xFE, 0x7E, 0x01, 0xff}, // sidebarCategoryBg
+                {0xFE, 0x7E, 0x01, 0xff}, // sidebarFooterBg
                 {0xFF, 0x4D, 0x57, 0xff}, // categoryHighlight
                 {0xFF, 0xFF, 0xFF, 0x40}, // dragHighlight
             };
@@ -54,6 +58,8 @@ namespace HBAS::ThemeManager
                 {0x8B, 0x00, 0x0C, 0xff}, // sidebarColor (rojo oscuro)
                 {0xFF, 0xFF, 0xFF, 0xff}, // textPrimary
                 {0xB0, 0xB0, 0xB0, 0xff}, // textSecondary
+                {0xFF, 0xFF, 0xFF, 0xff}, // textCard
+                {0xD0, 0xD0, 0xD0, 0xff}, // textDescription
                 {0x8B, 0x00, 0x0C, 0xff}, // sidebarTitleBg
                 {0x8B, 0x00, 0x0C, 0xff}, // sidebarCategoryBg
                 {0x6E, 0x00, 0x0A, 0xff}, // sidebarFooterBg
@@ -68,6 +74,8 @@ namespace HBAS::ThemeManager
                 {0x00, 0x59, 0xC8, 0xff}, // sidebarColor (azul Switch)
                 {0x10, 0x10, 0x10, 0xff}, // textPrimary
                 {0x55, 0x55, 0x55, 0xff}, // textSecondary
+                {0x10, 0x10, 0x10, 0xff}, // textCard
+                {0x20, 0x20, 0x20, 0xff}, // textDescription
                 {0x00, 0x59, 0xC8, 0xff}, // sidebarTitleBg
                 {0x00, 0x59, 0xC8, 0xff}, // sidebarCategoryBg
                 {0x00, 0x40, 0x9C, 0xff}, // sidebarFooterBg
@@ -82,6 +90,8 @@ namespace HBAS::ThemeManager
                 {0x00, 0x2B, 0x66, 0xff}, // sidebarColor
                 {0xF0, 0xF0, 0xF0, 0xff}, // textPrimary
                 {0x9A, 0x9A, 0xA5, 0xff}, // textSecondary
+                {0xF0, 0xF0, 0xF0, 0xff}, // textCard
+                {0xC8, 0xC8, 0xCC, 0xff}, // textDescription
                 {0x00, 0x2B, 0x66, 0xff}, // sidebarTitleBg
                 {0x00, 0x2B, 0x66, 0xff}, // sidebarCategoryBg
                 {0x00, 0x1C, 0x42, 0xff}, // sidebarFooterBg
@@ -110,6 +120,8 @@ namespace HBAS::ThemeManager
         sidebarColor         = colors.sidebarColor;
         textPrimary          = colors.textPrimary;
         textSecondary        = colors.textSecondary;
+        textCard             = colors.textCard;
+        textDescription      = colors.textDescription;
         sidebarTitleBg       = colors.sidebarTitleBg;
         sidebarCategoryBg    = colors.sidebarCategoryBg;
         sidebarFooterBg      = colors.sidebarFooterBg;
@@ -153,6 +165,8 @@ namespace HBAS::ThemeManager
             file << colorToLine(customColors.sidebarColor) << "\n";
             file << colorToLine(customColors.textPrimary) << "\n";
             file << colorToLine(customColors.textSecondary) << "\n";
+            file << colorToLine(customColors.textCard) << "\n";
+            file << colorToLine(customColors.textDescription) << "\n";
             file << colorToLine(customColors.sidebarTitleBg) << "\n";
             file << colorToLine(customColors.sidebarCategoryBg) << "\n";
             file << colorToLine(customColors.sidebarFooterBg) << "\n";
@@ -190,6 +204,8 @@ namespace HBAS::ThemeManager
             if (std::getline(file, line)) loaded.sidebarColor      = lineToColor(line, loaded.sidebarColor);
             if (std::getline(file, line)) loaded.textPrimary       = lineToColor(line, loaded.textPrimary);
             if (std::getline(file, line)) loaded.textSecondary     = lineToColor(line, loaded.textSecondary);
+            if (std::getline(file, line)) loaded.textCard          = lineToColor(line, loaded.textCard);
+            if (std::getline(file, line)) loaded.textDescription   = lineToColor(line, loaded.textDescription);
             if (std::getline(file, line)) loaded.sidebarTitleBg    = lineToColor(line, loaded.sidebarTitleBg);
             if (std::getline(file, line)) loaded.sidebarCategoryBg = lineToColor(line, loaded.sidebarCategoryBg);
             if (std::getline(file, line)) loaded.sidebarFooterBg   = lineToColor(line, loaded.sidebarFooterBg);

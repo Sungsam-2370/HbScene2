@@ -42,6 +42,8 @@ namespace HBAS::ThemeManager
     inline CST_Color sidebarColor   = {0x03, 0x1D, 0x3A, 0xff};
     inline CST_Color textPrimary    = {0x00, 0x00, 0x00, 0xff};
     inline CST_Color textSecondary  = {0x50, 0x50, 0x50, 0xff};
+    inline CST_Color textCard       = {0x00, 0x00, 0x00, 0xff}; // texto nombre en tarjetas del menu principal
+    inline CST_Color textDescription= {0x20, 0x20, 0x20, 0xff}; // texto de descripcion al entrar a un componente
 
     // Las 3 secciones del sidebar izquierdo
     inline CST_Color sidebarTitleBg    = {0x03, 0x1D, 0x3A, 0xff}; // seccion superior (titulo/logo)
@@ -64,6 +66,8 @@ namespace HBAS::ThemeManager
         CST_Color sidebarColor;
         CST_Color textPrimary;
         CST_Color textSecondary;
+        CST_Color textCard;
+        CST_Color textDescription;
         CST_Color sidebarTitleBg;
         CST_Color sidebarCategoryBg;
         CST_Color sidebarFooterBg;
@@ -77,6 +81,8 @@ namespace HBAS::ThemeManager
         {0x03, 0x1D, 0x3A, 0xff}, // sidebarColor
         {0x00, 0x00, 0x00, 0xff}, // textPrimary
         {0x50, 0x50, 0x50, 0xff}, // textSecondary
+        {0x00, 0x00, 0x00, 0xff}, // textCard
+        {0x20, 0x20, 0x20, 0xff}, // textDescription
         {0x03, 0x1D, 0x3A, 0xff}, // sidebarTitleBg
         {0x03, 0x1D, 0x3A, 0xff}, // sidebarCategoryBg
         {0x03, 0x1D, 0x3A, 0xff}, // sidebarFooterBg

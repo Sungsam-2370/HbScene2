@@ -27,6 +27,8 @@ ThemeColorizeScreen::ThemeColorizeScreen()
 		{ &HBAS::ThemeManager::customColors.background,       "Fondo general" },
 		{ &HBAS::ThemeManager::customColors.textPrimary,      "Texto principal" },
 		{ &HBAS::ThemeManager::customColors.textSecondary,    "Texto secundario" },
+		{ &HBAS::ThemeManager::customColors.textCard,         "Texto de tarjetas (menu)" },
+		{ &HBAS::ThemeManager::customColors.textDescription,  "Texto de descripcion" },
 		{ &HBAS::ThemeManager::customColors.sidebarColor,     "Fondo de menus laterales" },
 		{ &HBAS::ThemeManager::customColors.sidebarTitleBg,   "Sidebar: seccion titulo" },
 		{ &HBAS::ThemeManager::customColors.sidebarCategoryBg,"Sidebar: seccion categorias" },

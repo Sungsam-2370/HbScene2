@@ -29,7 +29,7 @@ AppCard::AppCard(Package& package, AppList* list)
 	}, !list)
 	, version(("v" + package.getVersion()).c_str(), TEXT_SIZE, &HBAS::ThemeManager::textSecondary)
 	, status(package.statusStringDisplay(), TEXT_SIZE, &HBAS::ThemeManager::textSecondary)
-	, appname(package.getTitle().c_str(), TEXT_SIZE + 3, &HBAS::ThemeManager::textPrimary)
+	, appname(package.getTitle().c_str(), TEXT_SIZE + 3, &HBAS::ThemeManager::textCard)
 	//, author(package.getAuthor().c_str(), TEXT_SIZE, &HBAS::ThemeManager::textSecondary)
 	, statusicon((RAMFS "res/" + std::string(package.statusString()) + ".png").c_str())
 {

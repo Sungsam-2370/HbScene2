@@ -213,12 +213,6 @@ void MainDisplay::render(Element* parent)
 		{
 			std::string fullMsg = "                                 NO ESTAS USANDO ALGUN PKUNICO DEL GRUPO SWITCH SCENE\n\n                                 DESCARGAS DESHABILITADAS\n\n                                 Para poder descargar use el PkUnico del grupo Switch Scene";
 
-			// Agregar el detalle tecnico de por que fallo la validacion del hash,
-			// para poder diagnosticar el problema directamente en pantalla
-			if (!gAtmosphereValid && !gAtmosphereDebugMsg.empty())
-			{
-				fullMsg += "\n\n                                 [Diagnostico]: " + gAtmosphereDebugMsg;
-			}
 
 			switchSceneWarning = new TextElement(
 				fullMsg,

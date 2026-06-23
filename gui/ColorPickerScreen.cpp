@@ -74,7 +74,9 @@ ColorPickerScreen::ColorPickerScreen(const std::string& title, CST_Color initial
 	this->append(doneButton);
 
 	// teclado en pantalla, oculto hasta que se edite un campo
-	keyboard = new EKeyboard(std::bind(&ColorPickerScreen::keyboardInputCallback, this));
+	// Se usa el constructor sin callback para que storeOwnText=true y
+	// getTextInput() acumule correctamente los caracteres escritos.
+	keyboard = new EKeyboard();
 	keyboard->position(190, SCREEN_HEIGHT - 360);
 	keyboard->preventEnterAndTab = true;
 	keyboard->updateSize();
@@ -84,7 +86,7 @@ ColorPickerScreen::ColorPickerScreen(const std::string& title, CST_Color initial
 	// boton visible para confirmar el texto escrito, ya que el teclado en
 	// pantalla de chesto no tiene una tecla "Enter" navegable con D-pad
 	confirmEditButton = new Button("Confirmar", 0, true, 18, 170);
-	confirmEditButton->position(1100, SCREEN_HEIGHT - 360 + 130);
+	confirmEditButton->position(660, SCREEN_HEIGHT - 360 - 60);
 	confirmEditButton->action = std::bind(&ColorPickerScreen::finishEditingField, this);
 	confirmEditButton->hidden = true;
 	this->append(confirmEditButton);
@@ -306,7 +308,7 @@ bool ColorPickerScreen::process(InputEvents* event)
 		// Tocar el boton "Confirmar texto" aplica el valor escrito.
 		// Esta es la via principal, ya que el teclado en pantalla de
 		// chesto no tiene una tecla "Enter" navegable con D-pad.
-		if (event->isTouchUp() && event->touchIn(1100, SCREEN_HEIGHT - 360 + 130, 170, 50))
+		if (event->isTouchUp() && event->touchIn(660, SCREEN_HEIGHT - 360 - 60, 170, 50))
 		{
 			finishEditingField();
 			return true;
