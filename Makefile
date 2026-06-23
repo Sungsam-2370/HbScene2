@@ -2,7 +2,7 @@ BINARY      := scene_eshop
  
 APP_TITLE   := Scene Eshop
 APP_AUTHOR  := Luigi Switch Scene
-APP_VERSION := Prelanzamiento
+APP_VERSION := 1.0.0
  
 SOURCES     += gui console
 DEBUG_BUILD := 0

@@ -3,11 +3,11 @@
 
 // the meta-repo can be used to change or add more repos
 // #define   META_REPO "https://meta.fortheusers.org"
-#define   META_REPO "https://raw.githubusercontent.com/tortugasdoradas-arch/Repo/main"
+#define   META_REPO "https://raw.githubusercontent.com/tortugasdoradas-arch/Repo_2/main"
 
 // hardcoded known repos as of this release
 #define   WIIU_REPO "https://wiiu.cdn.fortheusers.org"
-#define SWITCH_REPO "https://raw.githubusercontent.com/tortugasdoradas-arch/Repo/main"
+#define SWITCH_REPO "https://raw.githubusercontent.com/tortugasdoradas-arch/Repo_2/main"
 #define   _3DS_REPO "https://3ds.apps.fortheusers.org"
 #define    WII_REPO "https://hbb1.oscwii.org"
 

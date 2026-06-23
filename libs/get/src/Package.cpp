@@ -593,6 +593,12 @@ bool Package::install2(const std::string& pkg_path, const std::string& tmp_path,
 	if (libget_status_callback != nullptr)
 		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
 
+	// forzar un redibujado inmediato para que el cambio de texto a
+	// "Instalando... (2/2)" se vea reflejado en pantalla de inmediato,
+	// en vez de quedar congelado con el ultimo frame de la descarga
+	if (networking_callback != nullptr)
+		networking_callback(nullptr, 1.0);
+
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_2.zip";
 
 	struct ZipGuard {
@@ -632,6 +638,10 @@ bool Package::install3(const std::string& pkg_path, const std::string& tmp_path,
 	if (libget_status_callback != nullptr)
 		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
 
+	// forzar redibujado inmediato del texto de estado
+	if (networking_callback != nullptr)
+		networking_callback(nullptr, 1.0);
+
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_3.zip";
 
 	struct ZipGuard {
@@ -669,6 +679,10 @@ bool Package::install4(const std::string& pkg_path, const std::string& tmp_path,
 
 	if (libget_status_callback != nullptr)
 		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
+
+	// forzar redibujado inmediato del texto de estado
+	if (networking_callback != nullptr)
+		networking_callback(nullptr, 1.0);
 
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_4.zip";
 

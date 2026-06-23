@@ -508,6 +508,13 @@ int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 
 	AppDetails* popup = (AppDetails*)RootDisplay::subscreen;
 
+	// Reportar actividad del usuario para resetear el temporizador de
+	// atenuado de pantalla, sin desactivar el sleep permanentemente.
+	// Esto evita que la pantalla se atenúe durante descargas largas.
+#if defined(SWITCH)
+	appletReportUserIsActive();
+#endif
+
 	// update the amount
 	if (popup != NULL)
 	{
