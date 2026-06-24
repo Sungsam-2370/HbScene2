@@ -177,6 +177,9 @@ void ThemeColorizeScreen::openPickerForRow(int row)
 			// aplicar en vivo para que se vea reflejado de inmediato
 			HBAS::ThemeManager::currentTheme = HBAS::ThemeManager::THEME_CUSTOM;
 			HBAS::ThemeManager::applyTheme(HBAS::ThemeManager::THEME_CUSTOM);
+
+			// persistir para que sobreviva al cierre de la app
+			HBAS::ThemeManager::saveThemePreference();
 		}
 	));
 }

@@ -127,7 +127,7 @@ TextElement::TextElement(std::string text, int size, CST_Color* color, int font_
 	std::string sText = text;
 	setText(sText);
 	setSize(size);
-	if (color) setColor(*color);
+	if (color) setColorPtr(color); // guardar puntero vivo para actualizaciones de tema
 	setFont(font_type);
 	setWrappedWidth(wrapped_width);
 	update();
@@ -146,6 +146,13 @@ void TextElement::setSize(int size)
 void TextElement::setColor(const CST_Color& color)
 {
 	this->textColor = color;
+	this->textColorPtr = nullptr; // si se asigna color directo, desvincula el puntero
+}
+
+void TextElement::setColorPtr(CST_Color* colorPtr)
+{
+	this->textColorPtr = colorPtr;
+	if (colorPtr) this->textColor = *colorPtr;
 }
 
 void TextElement::setFont(int font_type)
@@ -160,6 +167,19 @@ void TextElement::setWrappedWidth(int wrapped_width)
 
 void TextElement::update(bool forceUpdate)
 {
+	// si hay un puntero de color vivo (vinculado al ThemeManager), releerlo ahora
+	// y forzar re-render solo si el color cambio desde la ultima vez
+	if (textColorPtr)
+	{
+		CST_Color newColor = *textColorPtr;
+		if (newColor.r != textColor.r || newColor.g != textColor.g ||
+		    newColor.b != textColor.b || newColor.a != textColor.a)
+		{
+			textColor = newColor;
+			forceUpdate = true;
+		}
+	}
+
 	std::string key = Texture::textElemPrefix + text + std::to_string(textSize);
 
 	clear();

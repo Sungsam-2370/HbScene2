@@ -34,7 +34,7 @@ Sidebar::Sidebar()
 		category[x].icon->position(30/SCALER, 150/SCALER + x * 70/SCALER - 5/SCALER - scrollOffset);
 		super::append(category[x].icon);
 
-		category[x].name = new TextElement(i18n(cat_names[x]), 25);
+		category[x].name = new TextElement(i18n(cat_names[x]), 25, &HBAS::ThemeManager::textPrimary);
 		category[x].name->position(105/SCALER, 150/SCALER + x * 70/SCALER - scrollOffset);
 		super::append(category[x].name);
 	}

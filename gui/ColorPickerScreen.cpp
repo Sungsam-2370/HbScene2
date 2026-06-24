@@ -335,9 +335,10 @@ bool ColorPickerScreen::process(InputEvents* event)
 			return true;
 		}
 
-		// procesar tecla y actualizar el preview en vivo
+		// procesar tecla y actualizar el preview en vivo con lo que se va escribiendo
 		bool handled = keyboard->process(event);
-		editPreviewText.setText(keyboard->textInput);
+		std::string typed = keyboard->textInput;
+		editPreviewText.setText(typed.empty() ? "(escribe un valor 0-255)" : typed);
 		editPreviewText.update();
 		return handled;
 	}
@@ -511,27 +512,23 @@ void ColorPickerScreen::startEditingField(int field)
 	keyboard->hidden = false;
 	confirmEditButton->hidden = false;
 
-	// pre-cargar el valor actual para que el usuario parta de el,
-	// limpiando primero para que push_back no acumule sobre basura
-	keyboard->textInput.clear();
+	// mostrar el valor actual como referencia visual, pero NO pre-cargarlo
+	// en textInput: el usuario escribe el numero nuevo desde cero, sin
+	// necesitar borrar lo existente (que era el bug que causaba el 255)
+	std::string currentVal;
 	switch (field)
 	{
-	case EDIT_HEX:
-		keyboard->textInput = hexValue.getText();
-		break;
-	case EDIT_R:
-		keyboard->textInput = std::to_string((int)currentColor.r);
-		break;
-	case EDIT_G:
-		keyboard->textInput = std::to_string((int)currentColor.g);
-		break;
-	case EDIT_B:
-		keyboard->textInput = std::to_string((int)currentColor.b);
-		break;
+	case EDIT_HEX: currentVal = hexValue.getText();                     break;
+	case EDIT_R:   currentVal = std::to_string((int)currentColor.r);    break;
+	case EDIT_G:   currentVal = std::to_string((int)currentColor.g);    break;
+	case EDIT_B:   currentVal = std::to_string((int)currentColor.b);    break;
 	}
 
-	// mostrar el texto actual en el preview y hacerlo visible
-	editPreviewText.setText(keyboard->textInput);
+	// empezar con campo vacio para que el usuario escriba sin conflicto
+	keyboard->textInput.clear();
+
+	// mostrar "Valor actual: XXX" encima del teclado como referencia
+	editPreviewText.setText("Valor actual: " + currentVal + "   |   Escribe el nuevo valor:");
 	editPreviewText.update();
 	editPreviewText.hidden = false;
 }

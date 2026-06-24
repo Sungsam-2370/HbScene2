@@ -28,6 +28,7 @@ public:
 	void setText(const std::string& text);
 	void setSize(int size);
 	void setColor(const CST_Color& color);
+	void setColorPtr(CST_Color* colorPtr);
 	void setFont(int font_type);
 	void setWrappedWidth(int wrapped_width);
 
@@ -60,6 +61,7 @@ private:
 	// default values
 	int textSize = 16;
 	CST_Color textColor = (CST_Color){ 0xff, 0xff, 0xff };
+	CST_Color* textColorPtr = nullptr;
 	int textFont = NORMAL;
 	int textWrappedWidth = 0;
 
