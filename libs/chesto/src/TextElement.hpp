@@ -35,6 +35,9 @@ public:
 	/// update TextElement with changes
 	void update(bool forceUpdate = false);
 
+	/// override render to auto-refresh color from live pointer each frame
+	void render(Element* parent) override;
+
 	const std::string& getText() const
 	{
 		return text;

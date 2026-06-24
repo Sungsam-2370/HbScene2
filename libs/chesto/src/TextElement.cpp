@@ -165,6 +165,17 @@ void TextElement::setWrappedWidth(int wrapped_width)
 	this->textWrappedWidth = wrapped_width;
 }
 
+void TextElement::render(Element* parent)
+{
+	// si hay un puntero de color vivo, actualizar antes de dibujar para
+	// que cualquier cambio de tema se refleje en el mismo frame sin
+	// necesitar reiniciar la aplicacion
+	if (textColorPtr)
+		update();
+
+	Texture::render(parent);
+}
+
 void TextElement::update(bool forceUpdate)
 {
 	// si hay un puntero de color vivo (vinculado al ThemeManager), releerlo ahora
