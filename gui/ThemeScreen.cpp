@@ -193,6 +193,14 @@ void ThemeScreen::selectCard(int index)
 
 	if (index == HBAS::ThemeManager::THEME_CUSTOM)
 	{
+		// Si el tema activo no es personalizado, inicializar customColors
+		// con los colores del preset activo para que el editor parta de ellos
+		// y no resetee toda la paleta al confirmar el primer color editado
+		if (HBAS::ThemeManager::currentTheme != HBAS::ThemeManager::THEME_CUSTOM)
+		{
+			HBAS::ThemeManager::customColors =
+				HBAS::ThemeManager::getPresetColors(HBAS::ThemeManager::currentTheme);
+		}
 		// abrir la pantalla de personalizacion de colores
 		RootDisplay::switchSubscreen(new ThemeColorizeScreen());
 		return;

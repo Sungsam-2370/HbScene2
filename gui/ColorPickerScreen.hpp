@@ -64,6 +64,9 @@ private:
 	Button* doneButton = nullptr;
 	Button* confirmEditButton = nullptr; // boton visible para confirmar el texto durante la edicion
 
+	// muestra en tiempo real el texto que el usuario esta escribiendo
+	TextElement editPreviewText;
+
 	// cual campo esta actualmente en edicion (-1 = ninguno, la rueda/barra
 	// tienen el foco de navegacion normal)
 	enum EditField { EDIT_NONE = -1, EDIT_HEX = 0, EDIT_R = 1, EDIT_G = 2, EDIT_B = 3 };
