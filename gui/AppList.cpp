@@ -97,7 +97,7 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 
 	// category text
 	category.setSize(28);
-	category.setColorPtr(&HBAS::ThemeManager::textPrimary);
+	category.setColorPtr(&HBAS::ThemeManager::textCard);
 
 	// sort mode text
 	sortBlurb.setSize(15);
