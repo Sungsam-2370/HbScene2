@@ -11,10 +11,10 @@ Sidebar::Sidebar()
 	: logo(LOGO_PATH)
 #if defined(DEBUG_BUILD) && !defined(WII_MOCK)
 	, title("hb-appstore Dev Build", 22, &HBAS::ThemeManager::textPrimary)
-	, subtitle("v" APP_VERSION " (" __DATE__ ")", 18, &HBAS::ThemeManager::textSecondary)
+	, subtitle("v" APP_VERSION " (" __DATE__ ")", 18, &HBAS::ThemeManager::textPrimary)
 #else
 	, title("Switch Scene Eshop", 22, &HBAS::ThemeManager::textPrimary)
-	, subtitle(APP_VERSION " para " PLATFORM, 18, &HBAS::ThemeManager::textSecondary)
+	, subtitle(APP_VERSION " para " PLATFORM, 18, &HBAS::ThemeManager::textPrimary)
 #endif
 {
 	// a sidebar consists of:

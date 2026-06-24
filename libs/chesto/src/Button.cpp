@@ -110,6 +110,16 @@ void Button::render(Element* parent)
 {
 	if (hidden) return;
 
+	// si el boton es dark, su fondo se deriva del color de fondo del MainDisplay
+	// releerlo en cada frame para reflejar cambios de tema sin necesitar recrear el boton
+	if (dark && RootDisplay::mainDisplay)
+	{
+		backgroundColor = RootDisplay::mainDisplay->backgroundColor;
+		backgroundColor.r += 0x25/255.0;
+		backgroundColor.g += 0x25/255.0;
+		backgroundColor.b += 0x25/255.0;
+	}
+
 	CST_SetDrawBlend(RootDisplay::renderer, true);
 
 	this->recalcPosition(parent);
