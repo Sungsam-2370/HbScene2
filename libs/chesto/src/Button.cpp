@@ -63,10 +63,9 @@ void Button::updateBounds()
 	if (dark)
 	{
 		backgroundColor = RootDisplay::mainDisplay->backgroundColor;
-		backgroundColor.r += 0x25/255.0;
-		backgroundColor.g += 0x25/255.0;
-		backgroundColor.b += 0x25/255.0;
-		// backgroundColor.r = fmin(backgroundColor.r, 1.0);
+		backgroundColor.r = fmin(1.0, backgroundColor.r + 0x25/255.0);
+		backgroundColor.g = fmin(1.0, backgroundColor.g + 0x25/255.0);
+		backgroundColor.b = fmin(1.0, backgroundColor.b + 0x25/255.0);
 	}
 	else
 		backgroundColor = (rgb){ 0xee/255.0, 0xee/255.0, 0xee/255.0 };
@@ -115,9 +114,9 @@ void Button::render(Element* parent)
 	if (dark && RootDisplay::mainDisplay)
 	{
 		backgroundColor = RootDisplay::mainDisplay->backgroundColor;
-		backgroundColor.r += 0x25/255.0;
-		backgroundColor.g += 0x25/255.0;
-		backgroundColor.b += 0x25/255.0;
+		backgroundColor.r = fmin(1.0, backgroundColor.r + 0x25/255.0);
+		backgroundColor.g = fmin(1.0, backgroundColor.g + 0x25/255.0);
+		backgroundColor.b = fmin(1.0, backgroundColor.b + 0x25/255.0);
 	}
 
 	CST_SetDrawBlend(RootDisplay::renderer, true);
