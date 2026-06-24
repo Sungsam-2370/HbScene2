@@ -97,11 +97,11 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 
 	// category text
 	category.setSize(28);
-	category.setColor(HBAS::ThemeManager::textPrimary);
+	category.setColorPtr(&HBAS::ThemeManager::textPrimary);
 
 	// sort mode text
 	sortBlurb.setSize(15);
-	sortBlurb.setColor(HBAS::ThemeManager::textSecondary);
+	sortBlurb.setColorPtr(&HBAS::ThemeManager::textSecondary);
 
 	auto myRed = HBAS::ThemeManager::isDarkMode ? lighterRed : red;
 
@@ -543,7 +543,6 @@ void AppList::update()
 		}
 	}
 
-	nowPlayingText.setColor(HBAS::ThemeManager::textPrimary);
 	nowPlayingText.update();
 	nowPlayingText.position((quitBtn.width + quitBtn.x) - nowPlayingText.width, 20); // TODO: copypasta position
 	nowPlayingIcon.position(nowPlayingText.x - 30, 20);

@@ -168,19 +168,23 @@ void TextElement::setWrappedWidth(int wrapped_width)
 void TextElement::update(bool forceUpdate)
 {
 	// si hay un puntero de color vivo (vinculado al ThemeManager), releerlo ahora
-	// y forzar re-render solo si el color cambio desde la ultima vez
+	// y actualizar textColor — la clave del cache incluye el color, por lo que
+	// un cambio genera automaticamente un cache miss y re-render sin forzarlo
 	if (textColorPtr)
 	{
-		CST_Color newColor = *textColorPtr;
-		if (newColor.r != textColor.r || newColor.g != textColor.g ||
-		    newColor.b != textColor.b || newColor.a != textColor.a)
-		{
-			textColor = newColor;
-			forceUpdate = true;
-		}
+		textColor = *textColorPtr;
 	}
 
 	std::string key = Texture::textElemPrefix + text + std::to_string(textSize);
+
+	// si hay un puntero de color vivo, incluirlo en la clave del cache para que
+	// un cambio de color genere una nueva entrada en lugar de reutilizar la anterior
+	if (textColorPtr)
+	{
+		key += "_c" + std::to_string(textColor.r)
+		     + "_" + std::to_string(textColor.g)
+		     + "_" + std::to_string(textColor.b);
+	}
 
 	clear();
 

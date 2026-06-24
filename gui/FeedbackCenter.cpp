@@ -95,7 +95,7 @@ void FeedbackMessage::build()
 
 FeedbackCenter::FeedbackCenter(AppList* appList)
 {
-    TextElement* header = new TextElement("Feedback Center", 35);
+    TextElement* header = new TextElement("Feedback Center", 35, &HBAS::ThemeManager::textPrimary);
     this->width = RootDisplay::mainDisplay->width; // TODO: chesto should handle this... eg. default all new full screen views to the dimensions of the main display
     this->height = RootDisplay::mainDisplay->height;
 

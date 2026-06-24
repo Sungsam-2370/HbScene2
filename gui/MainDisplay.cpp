@@ -404,9 +404,9 @@ int MainDisplay::updateLoader(void* clientp, double dlnow)
 
 ErrorScreen::ErrorScreen(std::string mainErrorText, std::string troubleshootingText)
 	: icon(LOGO_PATH)
-	, title(i18n("credits.title"), 50 - 25)
-	, errorMessage(mainErrorText.c_str(), 40)
-	, troubleshooting((std::string(i18n("errors.troubleshooting") + "\n") + troubleshootingText).c_str(), 20, NULL, false, 600)
+	, title(i18n("credits.title"), 50 - 25, &HBAS::ThemeManager::textPrimary)
+	, errorMessage(mainErrorText.c_str(), 40, &HBAS::ThemeManager::textPrimary)
+	, troubleshooting((std::string(i18n("errors.troubleshooting") + "\n") + troubleshootingText).c_str(), 20, &HBAS::ThemeManager::textSecondary, false, 600)
 	, btnQuit(i18n("listing.quit"), SELECT_BUTTON, false, 15)
 {
 	Container* logoCon = new Container(ROW_LAYOUT, 10);

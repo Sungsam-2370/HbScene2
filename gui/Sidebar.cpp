@@ -10,11 +10,11 @@
 Sidebar::Sidebar()
 	: logo(LOGO_PATH)
 #if defined(DEBUG_BUILD) && !defined(WII_MOCK)
-	, title("hb-appstore Dev Build", 22)
-	, subtitle("v" APP_VERSION " (" __DATE__ ")", 18)
+	, title("hb-appstore Dev Build", 22, &HBAS::ThemeManager::textPrimary)
+	, subtitle("v" APP_VERSION " (" __DATE__ ")", 18, &HBAS::ThemeManager::textSecondary)
 #else
-	, title("Switch Scene Eshop", 22)
-	, subtitle(APP_VERSION " para " PLATFORM, 18)
+	, title("Switch Scene Eshop", 22, &HBAS::ThemeManager::textPrimary)
+	, subtitle(APP_VERSION " para " PLATFORM, 18, &HBAS::ThemeManager::textSecondary)
 #endif
 {
 	// a sidebar consists of:
@@ -114,7 +114,7 @@ void Sidebar::addHints()
 	}
 
 	if (hint == nullptr) {
-		hint = new TextElement(i18n("sidebar.hide"), 15);
+		hint = new TextElement(i18n("sidebar.hide"), 15, &HBAS::ThemeManager::textSecondary);
 		super::append(hint);
 	}
 
