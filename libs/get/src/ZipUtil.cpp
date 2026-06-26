@@ -257,7 +257,7 @@ int UnZip::ExtractAll(const std::string& dirToExtract)
 		std::string fileName(dirToExtract);
 		fileName += '/';
 		fileName += GetFullFileName(fileInfo);
-		if (fileInfo.uncompressed_size != 0 && fileInfo.compression_method != 0)
+		if (fileInfo.uncompressed_size != 0)
 		{
 			// file
 			//  info("Extracting %s to: %s\n", GetFullFileName(fileInfo).c_str(), fileName.c_str());
