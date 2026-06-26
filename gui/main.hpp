@@ -27,6 +27,14 @@
 #define SOUND_PATH "./.toggle_sound"
 #define DEFAULT_GET_HOME "./.get/"
 
+// self-update: JSON con la version mas reciente publicada
+#define SELF_UPDATE_URL META_REPO "/version.json"
+
+// ruta absoluta del .nro en la SD (donde se reemplaza al actualizar)
+#define APP_NRO_PATH    "sdmc:/switch/scene_eshop/scene_eshop.nro"
+// ruta temporal durante la descarga (se renombra al .nro solo si termina bien)
+#define APP_NRO_TMP     "sdmc:/switch/scene_eshop/scene_eshop.nro.tmp"
+
 // Switch Scene validation
 // true  = carpeta sdmc:/config/switch-scene/Overlays existe → acceso completo
 // false = carpeta no encontrada → navegación libre, descargas bloqueadas

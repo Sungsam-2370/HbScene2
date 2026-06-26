@@ -42,6 +42,7 @@ public:
 	void beginInitialLoad();
 
 	bool checkMetaRepoForUpdates(Get* get);
+	bool checkSelfUpdate();          // compara version remota vs APP_VERSION
 	void updateSidebarColor();
 
 	Get* get = NULL;

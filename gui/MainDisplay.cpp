@@ -4,6 +4,9 @@
 #if defined(WII)
 #include <ogc/conf.h>
 #endif
+#include <cstdio>
+#include <cstdint>
+#include <sys/stat.h>
 #include <filesystem>
 #include <unordered_set>
 #include "../libs/get/src/Get.hpp"
@@ -194,6 +197,255 @@ bool MainDisplay::checkMetaRepoForUpdates(Get* get) {
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// checkSelfUpdate()
+// Descarga META_REPO/version.json, compara la version con APP_VERSION y,
+// si hay una version mas nueva, ofrece al usuario descargar la actualizacion.
+//
+// Formato esperado de version.json:
+//   {
+//     "version": "2.1.0",
+//     "download_url": "https://...scene_eshop.nro"
+//   }
+//
+// Retorna true si el usuario actualizo (para que el llamador pueda detener
+// la carga normal si lo desea), false en cualquier otro caso.
+// ---------------------------------------------------------------------------
+bool MainDisplay::checkSelfUpdate()
+{
+#if !defined(SWITCH)
+	// Self-update solo aplica en Switch por ahora
+	return false;
+#endif
+
+	std::string data;
+	bool success = downloadFileToMemory(SELF_UPDATE_URL, &data);
+	if (!success) {
+		std::cout << "[self-update] no se pudo descargar version.json" << std::endl;
+		return false;
+	}
+
+	rapidjson::Document d;
+	d.Parse(data.c_str());
+	if (d.HasParseError() || !d.HasMember("version") || !d.HasMember("download_url")) {
+		std::cout << "[self-update] version.json invalido" << std::endl;
+		return false;
+	}
+
+	std::string remoteVersion = d["version"].GetString();
+	std::string downloadUrl   = d["download_url"].GetString();
+
+	// Comparacion simple: si son identicas no hay nada que hacer
+	if (remoteVersion == APP_VERSION) {
+		std::cout << "[self-update] ya en la version mas reciente (" << APP_VERSION << ")" << std::endl;
+		return false;
+	}
+
+	std::cout << "[self-update] nueva version disponible: " << remoteVersion
+	          << " (actual: " << APP_VERSION << ")" << std::endl;
+
+	// --- Dialogo de confirmacion ---
+	// Usamos una variable de sincronizacion simple porque AlertDialog
+	// funciona de forma asincrona (callbacks). Bloqueamos el loop
+	// de eventos con una flag hasta que el usuario responda.
+	bool userConfirmed = false;
+	bool userResponded = false;
+
+	std::string msg =
+		"Nueva version disponible: v" + remoteVersion + "\n"
+		"Version actual:           v" + std::string(APP_VERSION) + "\n\n"
+		"Se descargara y reemplazara el .nro en la SD.\n"
+		"Deberas reiniciar la app para aplicar la actualizacion.\n\n"
+		"     Presiona A para actualizar.";
+
+	auto* dlg = new AlertDialog("Actualizacion disponible", msg);
+	dlg->onConfirm = [&]() {
+		userConfirmed = true;
+		userResponded = true;
+		dlg->hidden = true;
+	};
+	dlg->onCancel = [&]() {
+		userConfirmed = false;
+		userResponded = true;
+		dlg->hidden = true;
+	};
+	super::append(dlg);
+	dlg->show();
+
+	// Mini event-loop hasta que el usuario responda.
+	// Patron identico al de AppDetails::updateLoader para no romper el arbol de eventos.
+	while (!userResponded) {
+		InputEvents* events = new InputEvents();
+		while (events->update())
+			RootDisplay::mainDisplay->process(events);
+		RootDisplay::mainDisplay->render(NULL);
+		delete events;
+		CST_Delay(16);
+	}
+
+	super::remove(dlg);
+	delete dlg;
+
+	if (!userConfirmed)
+		return false;
+
+	// --- Descarga a archivo temporal ---
+	std::cout << "[self-update] descargando " << downloadUrl << " -> " << APP_NRO_TMP << std::endl;
+
+	// Mostrar mensaje de progreso (texto simple sobre pantalla)
+	auto* progressMsg = new TextElement(
+		"Descargando actualizacion, por favor espera...",
+		24, nullptr, NORMAL, 700
+	);
+	progressMsg->constrain(ALIGN_CENTER_BOTH);
+	super::append(progressMsg);
+	RootDisplay::mainDisplay->render(NULL);
+
+	bool dlOk = downloadFileToDisk(downloadUrl, APP_NRO_TMP);
+
+	super::remove(progressMsg);
+	delete progressMsg;
+
+	if (!dlOk) {
+		std::cout << "[self-update] fallo la descarga" << std::endl;
+		// Limpiar el .tmp si quedo a medias
+		std::remove(APP_NRO_TMP);
+
+		auto* errDlg = new AlertDialog(
+			"Error de descarga",
+			"No se pudo descargar la actualizacion.\n"
+			"Verifica tu conexion a internet e intenta de nuevo."
+		);
+		errDlg->onConfirm = [errDlg]() { errDlg->hidden = true; };
+		super::append(errDlg);
+		errDlg->show();
+		// breve pausa para que el usuario lea el error
+		CST_Delay(3000);
+		super::remove(errDlg);
+		delete errDlg;
+		return false;
+	}
+
+	// --- Validar el .tmp antes de reemplazar el .nro ---
+	// downloadFileToDisk solo verifica que curl no dio error de red,
+	// pero NO verifica el codigo HTTP. Si el archivo no existe en el servidor,
+	// GitHub devuelve una pagina 404 HTML con CURLE_OK.
+	// Hay que verificar que lo descargado es realmente un NRO valido antes
+	// de reemplazar el ejecutable actual.
+
+	// Verificacion 1: el .tmp existe y tiene un tamaño minimo razonable.
+	// Un .nro funcional no puede ser menor a ~64KB (cabecera + codigo minimo).
+	// Una pagina de error 404 de GitHub suele ser ~10KB.
+	struct stat tmpStat = {};
+	bool tmpExists = (stat(APP_NRO_TMP, &tmpStat) == 0);
+	if (!tmpExists || tmpStat.st_size < 65536) {
+		std::cout << "[self-update] .tmp demasiado pequeno (" 
+		          << (tmpExists ? tmpStat.st_size : 0) 
+		          << " bytes) - posible 404" << std::endl;
+		std::remove(APP_NRO_TMP);
+
+		auto* errDlg = new AlertDialog(
+			"Archivo invalido",
+			"El archivo descargado no es valido\n"
+			"(posiblemente el servidor devolvio un error).\n\n"
+			"Tu instalacion actual no fue modificada."
+		);
+		errDlg->onConfirm = [errDlg]() { errDlg->hidden = true; };
+		super::append(errDlg);
+		errDlg->show();
+		CST_Delay(3000);
+		super::remove(errDlg);
+		delete errDlg;
+		return false;
+	}
+
+	// Verificacion 2: los bytes en offset 0x10 deben ser el magic "NRO0".
+	// Formato NRO de Switch (switchbrew.org/wiki/NRO):
+	//   offset 0x00: MOD0 offset (4 bytes)
+	//   offset 0x04: padding (4 bytes)  
+	//   offset 0x08: padding (4 bytes)
+	//   offset 0x0C: padding (4 bytes)
+	//   offset 0x10: magic "NRO0" (4 bytes) <-- aqui verificamos
+	{
+		FILE* tmpFile = fopen(APP_NRO_TMP, "rb");
+		bool validNro = false;
+		if (tmpFile) {
+			uint8_t header[0x14] = {};
+			if (fread(header, 1, sizeof(header), tmpFile) == sizeof(header)) {
+				// magic NRO0 = 0x4E 0x52 0x4F 0x30
+				validNro = (header[0x10] == 0x4E &&
+				            header[0x11] == 0x52 &&
+				            header[0x12] == 0x4F &&
+				            header[0x13] == 0x30);
+			}
+			fclose(tmpFile);
+		}
+
+		if (!validNro) {
+			std::cout << "[self-update] magic NRO0 no encontrado en .tmp - archivo corrupto o 404" << std::endl;
+			std::remove(APP_NRO_TMP);
+
+			auto* errDlg = new AlertDialog(
+				"Archivo corrupto",
+				"El archivo descargado no es un NRO valido.\n"
+				"Puede que el link de descarga este desactualizado\n"
+				"o que la descarga se haya interrumpido.\n\n"
+				"Tu instalacion actual no fue modificada."
+			);
+			errDlg->onConfirm = [errDlg]() { errDlg->hidden = true; };
+			super::append(errDlg);
+			errDlg->show();
+			CST_Delay(3000);
+			super::remove(errDlg);
+			delete errDlg;
+			return false;
+		}
+	}
+
+	std::cout << "[self-update] .tmp validado correctamente (" 
+	          << tmpStat.st_size << " bytes, magic NRO0 OK)" << std::endl;
+
+	// --- Reemplazar el .nro ---
+	// rename() es atomico en la mayoria de sistemas de archivos:
+	// si falla, el original sigue intacto.
+	if (std::rename(APP_NRO_TMP, APP_NRO_PATH) != 0) {
+		std::cout << "[self-update] fallo el rename de .tmp a .nro" << std::endl;
+		std::remove(APP_NRO_TMP);
+		return false;
+	}
+
+	std::cout << "[self-update] actualizacion aplicada correctamente" << std::endl;
+
+	// --- Dialogo final ---
+	bool closedDone = false;
+	auto* doneDlg = new AlertDialog(
+		"Actualizacion completada",
+		"v" + remoteVersion + " instalada correctamente.\n\n"
+		"Cierra la aplicacion y vuelve a abrirla\n"
+		"para usar la nueva version."
+	);
+	doneDlg->onConfirm = [&]() {
+		closedDone = true;
+		doneDlg->hidden = true;
+	};
+	super::append(doneDlg);
+	doneDlg->show();
+
+	while (!closedDone) {
+		InputEvents* events = new InputEvents();
+		while (events->update())
+			RootDisplay::mainDisplay->process(events);
+		RootDisplay::mainDisplay->render(NULL);
+		delete events;
+		CST_Delay(16);
+	}
+
+	super::remove(doneDlg);
+	delete doneDlg;
+
+	return true; // indica al llamador que hubo actualizacion
+}
+
 void MainDisplay::render(Element* parent)
 {
 	if (showingSplash)
@@ -291,6 +543,11 @@ bool MainDisplay::process(InputEvents* event)
 
 		// update active repos according to the metarepo
 		bool isOnline = checkMetaRepoForUpdates(get);
+
+		// comprobar si hay una version nueva del propio HbScene
+		// (se hace antes de cargar paquetes para que el usuario pueda
+		//  reiniciar limpiamente si acepta la actualizacion)
+		checkSelfUpdate();
 
 		// actually download the repos
 		get->update();
