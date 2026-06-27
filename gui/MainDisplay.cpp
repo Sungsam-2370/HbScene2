@@ -256,7 +256,7 @@ bool MainDisplay::checkSelfUpdate()
 		"Version actual:           v" + std::string(APP_VERSION) + "\n\n"
 		"Se descargara y reemplazara el .nro en la SD.\n"
 		"Deberas reiniciar la app para aplicar la actualizacion.\n\n"
-		"     Presiona A para actualizar.";
+		"     Presiona A para actualizar   |   B para omitir.";
 
 	auto* dlg = new AlertDialog("Actualizacion disponible", msg);
 	dlg->onConfirm = [&]() {
@@ -274,10 +274,19 @@ bool MainDisplay::checkSelfUpdate()
 
 	// Mini event-loop hasta que el usuario responda.
 	// Patron identico al de AppDetails::updateLoader para no romper el arbol de eventos.
+	// B_BUTTON se captura aqui explicitamente para cancelar sin propagar el evento
+	// al arbol de elementos (donde podria causar un cierre inesperado de la app).
 	while (!userResponded) {
 		InputEvents* events = new InputEvents();
-		while (events->update())
+		while (events->update()) {
+			if (events->pressed(B_BUTTON)) {
+				userConfirmed = false;
+				userResponded = true;
+				dlg->hidden = true;
+				break;
+			}
 			RootDisplay::mainDisplay->process(events);
+		}
 		RootDisplay::mainDisplay->render(NULL);
 		delete events;
 		CST_Delay(16);
