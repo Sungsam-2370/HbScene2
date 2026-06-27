@@ -597,7 +597,7 @@ bool Package::install2(const std::string& pkg_path, const std::string& tmp_path,
 	// "Instalando... (2/2)" se vea reflejado en pantalla de inmediato,
 	// en vez de quedar congelado con el ultimo frame de la descarga
 	if (networking_callback != nullptr)
-		networking_callback(nullptr, 1.0);
+		networking_callback(nullptr, 0.0);  // resetea la barra a 0% al iniciar extraccion
 
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_2.zip";
 
@@ -622,7 +622,7 @@ bool Package::install2(const std::string& pkg_path, const std::string& tmp_path,
 	}
 
 	// extract all files from the second zip directly, no manifest needed
-	HomebrewZip.ExtractAll(ROOT_PATH);
+	HomebrewZip.ExtractAllWithProgress(ROOT_PATH);
 
 	printf("--> Second zip installed for %s\n", this->pkg_name.c_str());
 	return true;
@@ -640,7 +640,7 @@ bool Package::install3(const std::string& pkg_path, const std::string& tmp_path,
 
 	// forzar redibujado inmediato del texto de estado
 	if (networking_callback != nullptr)
-		networking_callback(nullptr, 1.0);
+		networking_callback(nullptr, 0.0);  // resetea la barra a 0% al iniciar extraccion
 
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_3.zip";
 
@@ -664,7 +664,7 @@ bool Package::install3(const std::string& pkg_path, const std::string& tmp_path,
 		return false;
 	}
 
-	HomebrewZip.ExtractAll(ROOT_PATH);
+	HomebrewZip.ExtractAllWithProgress(ROOT_PATH);
 
 	printf("--> Third zip installed for %s\n", this->pkg_name.c_str());
 	return true;
@@ -682,7 +682,7 @@ bool Package::install4(const std::string& pkg_path, const std::string& tmp_path,
 
 	// forzar redibujado inmediato del texto de estado
 	if (networking_callback != nullptr)
-		networking_callback(nullptr, 1.0);
+		networking_callback(nullptr, 0.0);  // resetea la barra a 0% al iniciar extraccion
 
 	std::string downloadedFilePath = tmp_path + this->pkg_name + "_4.zip";
 
@@ -706,7 +706,7 @@ bool Package::install4(const std::string& pkg_path, const std::string& tmp_path,
 		return false;
 	}
 
-	HomebrewZip.ExtractAll(ROOT_PATH);
+	HomebrewZip.ExtractAllWithProgress(ROOT_PATH);
 
 	printf("--> Fourth zip installed for %s\n", this->pkg_name.c_str());
 	return true;

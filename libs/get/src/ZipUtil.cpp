@@ -266,6 +266,77 @@ int UnZip::ExtractAll(const std::string& dirToExtract)
 	}
 }
 
+// ---------------------------------------------------------------------------
+// ExtractAllWithProgress
+// Igual que ExtractAll pero llama a networking_callback despues de extraer
+// cada archivo, con un progreso de 0.0 a 1.0 basado en bytes descomprimidos.
+//
+// Paso 1 (rapido): recorre el directorio central del ZIP para sumar
+//                  uncompressed_size de todos los archivos.
+// Paso 2:          extrae archivo por archivo, acumulando bytes y reportando
+//                  progreso al callback en cada archivo.
+//
+// Si networking_callback es nullptr, se comporta identico a ExtractAll.
+// ---------------------------------------------------------------------------
+int UnZip::ExtractAllWithProgress(const std::string& dirToExtract)
+{
+	// Paso 1: sumar el total de bytes descomprimidos del ZIP.
+	// unzGoToNextFile solo avanza el puntero en el directorio central
+	// (ya cargado en memoria por unzOpen), no lee datos comprimidos.
+	// En un ZIP de 1000 archivos esto tarda menos de 1ms.
+	uint64_t totalBytes = 0;
+	{
+		int code = unzGoToFirstFile(fileToUnzip);
+		while (code == UNZ_OK)
+		{
+			unz_file_info_s fi = GetFileInfo();
+			if (fi.uncompressed_size != 0)
+				totalBytes += fi.uncompressed_size;
+			code = unzGoToNextFile(fileToUnzip);
+		}
+	}
+
+	// Paso 2: extraer con progreso.
+	uint64_t extractedBytes = 0;
+	int i = 0;
+	for (;;)
+	{
+		int code;
+		if (i == 0)
+		{
+			code = unzGoToFirstFile(fileToUnzip);
+			i++;
+		}
+		else
+		{
+			code = unzGoToNextFile(fileToUnzip);
+		}
+		if (code == UNZ_END_OF_LIST_OF_FILE) return 0;
+
+		unz_file_info_s fileInfo = GetFileInfo();
+		std::string fileName(dirToExtract);
+		fileName += '/';
+		fileName += GetFullFileName(fileInfo);
+
+		if (fileInfo.uncompressed_size != 0)
+		{
+			Extract(fileName, fileInfo);
+
+			extractedBytes += fileInfo.uncompressed_size;
+
+			// Reportar progreso si hay callback activo.
+			// totalBytes > 0 siempre aqui (al menos un archivo con datos).
+			if (networking_callback != nullptr && totalBytes > 0)
+			{
+				double progress = (double)extractedBytes / (double)totalBytes;
+				// Clamp a [0.0, 1.0] por seguridad ante cualquier inconsistencia.
+				if (progress > 1.0) progress = 1.0;
+				networking_callback(nullptr, progress);
+			}
+		}
+	}
+}
+
 std::vector<std::string> UnZip::PathDump()
 {
 	int i = 0;

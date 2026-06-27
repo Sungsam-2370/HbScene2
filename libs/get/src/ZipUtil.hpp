@@ -32,6 +32,7 @@ public:
 	int Extract(const std::string& path, const unz_file_info_s& fileInfo);
 	int ExtractFile(const std::string& internalPath, const std::string& path);
 	int ExtractAll(const std::string& dirToExtract);
+	int ExtractAllWithProgress(const std::string& dirToExtract);
 	int ExtractDir(const std::string& internalDir, const std::string& externalDir);
 	std::vector<std::string> PathDump();
 	std::unordered_map<std::string, unz_file_pos> GetPathToFilePosMapping();
