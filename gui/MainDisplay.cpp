@@ -118,7 +118,7 @@ void MainDisplay::beginInitialLoad() {
 bool MainDisplay::checkMetaRepoForUpdates(Get* get) {
 	// download the metarepo (+1 network call)
 	std::string data("");
-	bool success = downloadFileToMemory(META_REPO "/index.json", &data);
+	bool success = downloadFileToMemory(META_REPO + "/index.json", &data);
 
 	if (!success) {
 		// couldn't download the metarepo, so just return
@@ -273,9 +273,9 @@ bool MainDisplay::checkSelfUpdate()
 	dlg->show();
 
 	// Mini event-loop hasta que el usuario responda.
-	// Patron identico al de AppDetails::updateLoader para no romper el arbol de eventos.
-	// B_BUTTON se captura aqui explicitamente para cancelar sin propagar el evento
-	// al arbol de elementos (donde podria causar un cierre inesperado de la app).
+	// Solo procesamos el dialogo (dlg->process) para evitar que el arbol completo
+	// (AppList con get==NULL, Sidebar, etc.) reciba los eventos y produzca un crash.
+	// B_BUTTON se captura primero de forma explicita para cancelar sin propagarlo.
 	while (!userResponded) {
 		InputEvents* events = new InputEvents();
 		while (events->update()) {
@@ -285,7 +285,7 @@ bool MainDisplay::checkSelfUpdate()
 				dlg->hidden = true;
 				break;
 			}
-			RootDisplay::mainDisplay->process(events);
+			dlg->process(events);
 		}
 		RootDisplay::mainDisplay->render(NULL);
 		delete events;
@@ -320,16 +320,25 @@ bool MainDisplay::checkSelfUpdate()
 		// Limpiar el .tmp si quedo a medias
 		std::remove(APP_NRO_TMP);
 
+		bool errClosed = false;
 		auto* errDlg = new AlertDialog(
 			"Error de descarga",
 			"No se pudo descargar la actualizacion.\n"
 			"Verifica tu conexion a internet e intenta de nuevo."
 		);
-		errDlg->onConfirm = [errDlg]() { errDlg->hidden = true; };
+		errDlg->onConfirm = [&]() { errClosed = true; errDlg->hidden = true; };
 		super::append(errDlg);
 		errDlg->show();
-		// breve pausa para que el usuario lea el error
-		CST_Delay(3000);
+		while (!errClosed) {
+			InputEvents* ev = new InputEvents();
+			while (ev->update()) {
+				if (ev->pressed(A_BUTTON) || ev->pressed(B_BUTTON)) { errClosed = true; errDlg->hidden = true; break; }
+				errDlg->process(ev);
+			}
+			RootDisplay::mainDisplay->render(NULL);
+			delete ev;
+			CST_Delay(16);
+		}
 		super::remove(errDlg);
 		delete errDlg;
 		return false;
@@ -353,16 +362,26 @@ bool MainDisplay::checkSelfUpdate()
 		          << " bytes) - posible 404" << std::endl;
 		std::remove(APP_NRO_TMP);
 
+		bool errClosed = false;
 		auto* errDlg = new AlertDialog(
 			"Archivo invalido",
 			"El archivo descargado no es valido\n"
 			"(posiblemente el servidor devolvio un error).\n\n"
 			"Tu instalacion actual no fue modificada."
 		);
-		errDlg->onConfirm = [errDlg]() { errDlg->hidden = true; };
+		errDlg->onConfirm = [&]() { errClosed = true; errDlg->hidden = true; };
 		super::append(errDlg);
 		errDlg->show();
-		CST_Delay(3000);
+		while (!errClosed) {
+			InputEvents* ev = new InputEvents();
+			while (ev->update()) {
+				if (ev->pressed(A_BUTTON) || ev->pressed(B_BUTTON)) { errClosed = true; errDlg->hidden = true; break; }
+				errDlg->process(ev);
+			}
+			RootDisplay::mainDisplay->render(NULL);
+			delete ev;
+			CST_Delay(16);
+		}
 		super::remove(errDlg);
 		delete errDlg;
 		return false;
@@ -394,6 +413,7 @@ bool MainDisplay::checkSelfUpdate()
 			std::cout << "[self-update] magic NRO0 no encontrado en .tmp - archivo corrupto o 404" << std::endl;
 			std::remove(APP_NRO_TMP);
 
+			bool errClosed = false;
 			auto* errDlg = new AlertDialog(
 				"Archivo corrupto",
 				"El archivo descargado no es un NRO valido.\n"
@@ -401,10 +421,19 @@ bool MainDisplay::checkSelfUpdate()
 				"o que la descarga se haya interrumpido.\n\n"
 				"Tu instalacion actual no fue modificada."
 			);
-			errDlg->onConfirm = [errDlg]() { errDlg->hidden = true; };
+			errDlg->onConfirm = [&]() { errClosed = true; errDlg->hidden = true; };
 			super::append(errDlg);
 			errDlg->show();
-			CST_Delay(3000);
+			while (!errClosed) {
+				InputEvents* ev = new InputEvents();
+				while (ev->update()) {
+					if (ev->pressed(A_BUTTON) || ev->pressed(B_BUTTON)) { errClosed = true; errDlg->hidden = true; break; }
+					errDlg->process(ev);
+				}
+				RootDisplay::mainDisplay->render(NULL);
+				delete ev;
+				CST_Delay(16);
+			}
 			super::remove(errDlg);
 			delete errDlg;
 			return false;
@@ -443,7 +472,7 @@ bool MainDisplay::checkSelfUpdate()
 	while (!closedDone) {
 		InputEvents* events = new InputEvents();
 		while (events->update())
-			RootDisplay::mainDisplay->process(events);
+			doneDlg->process(events);
 		RootDisplay::mainDisplay->render(NULL);
 		delete events;
 		CST_Delay(16);
