@@ -256,7 +256,7 @@ bool MainDisplay::checkSelfUpdate()
 		"Version actual:           v" + std::string(APP_VERSION) + "\n\n"
 		"Se descargara y reemplazara el .nro en la SD.\n"
 		"Deberas reiniciar la app para aplicar la actualizacion.\n\n"
-		"     Presiona A para actualizar   |   B para omitir.";
+		"[A] Actualizar    [B] Cancelar";
 
 	auto* dlg = new AlertDialog("Actualizacion disponible", msg);
 	dlg->onConfirm = [&]() {
@@ -273,19 +273,28 @@ bool MainDisplay::checkSelfUpdate()
 	dlg->show();
 
 	// Mini event-loop hasta que el usuario responda.
-	// Solo procesamos el dialogo (dlg->process) para evitar que el arbol completo
-	// (AppList con get==NULL, Sidebar, etc.) reciba los eventos y produzca un crash.
-	// B_BUTTON se captura primero de forma explicita para cancelar sin propagarlo.
+	// NO llamamos dlg->process(events) porque chesto intenta navegar con
+	// botones fisicos dentro del dialogo y produce un crash.
+	// Manejamos A y B manualmente aqui, y el touch funciona via render+SDL.
 	while (!userResponded) {
 		InputEvents* events = new InputEvents();
 		while (events->update()) {
+			if (events->pressed(A_BUTTON)) {
+				userConfirmed = true;
+				userResponded = true;
+				dlg->hidden = true;
+				break;
+			}
 			if (events->pressed(B_BUTTON)) {
 				userConfirmed = false;
 				userResponded = true;
 				dlg->hidden = true;
 				break;
 			}
-			dlg->process(events);
+			// touch: dejar que el dialogo lo maneje (no crashea con touch)
+			if (events->isTouch()) {
+				dlg->process(events);
+			}
 		}
 		RootDisplay::mainDisplay->render(NULL);
 		delete events;
@@ -444,11 +453,36 @@ bool MainDisplay::checkSelfUpdate()
 	          << tmpStat.st_size << " bytes, magic NRO0 OK)" << std::endl;
 
 	// --- Reemplazar el .nro ---
-	// rename() es atomico en la mayoria de sistemas de archivos:
-	// si falla, el original sigue intacto.
+	// En exFAT (Switch), rename() falla si el destino ya existe.
+	// Hay que borrar el .nro actual primero. Es seguro porque el .nro
+	// ya fue cargado completamente en RAM por nx-hbloader al iniciar.
+	std::remove(APP_NRO_PATH);
 	if (std::rename(APP_NRO_TMP, APP_NRO_PATH) != 0) {
-		std::cout << "[self-update] fallo el rename de .tmp a .nro" << std::endl;
+		std::cout << "[self-update] fallo el rename de .tmp a .nro: " << strerror(errno) << std::endl;
 		std::remove(APP_NRO_TMP);
+
+		bool errClosed = false;
+		std::string renameErr =
+			std::string("No se pudo reemplazar el archivo .nro.\n") +
+			"Error: " + strerror(errno) + "\n\n" +
+			"Ruta destino: " APP_NRO_PATH "\n\n" +
+			"Tu instalacion actual no fue modificada.";
+		auto* errDlg = new AlertDialog("Error al aplicar update", renameErr);
+		errDlg->onConfirm = [&]() { errClosed = true; errDlg->hidden = true; };
+		super::append(errDlg);
+		errDlg->show();
+		while (!errClosed) {
+			InputEvents* ev = new InputEvents();
+			while (ev->update()) {
+				if (ev->pressed(A_BUTTON) || ev->pressed(B_BUTTON)) { errClosed = true; errDlg->hidden = true; break; }
+				if (ev->isTouch()) errDlg->process(ev);
+			}
+			RootDisplay::mainDisplay->render(NULL);
+			delete ev;
+			CST_Delay(16);
+		}
+		super::remove(errDlg);
+		delete errDlg;
 		return false;
 	}
 
