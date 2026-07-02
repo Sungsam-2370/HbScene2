@@ -405,8 +405,41 @@ void AppList::update()
 	else
 		std::sort(packages.begin(), packages.end(), std::bind(&AppList::sortCompare, this, std::placeholders::_1, std::placeholders::_2));
 
+	// "Novedades" is a special category: instead of filtering by a category name,
+	// it shows only the last N packages added/updated (across all categories),
+	// selected by update date (descending) and, as a tiebreaker, by the package's
+	// "name" field (ascending, alphabetical). This selection is independent of
+	// whichever sortMode the user currently has active.
+	constexpr size_t NOVEDADES_COUNT = 9;
+	std::vector<Package> novedadesPackages;
+	if (curCategoryValue == "_novedades")
+	{
+		novedadesPackages = get->list();
+
+		// hide themes from novedades (same as "Todos los aportes"), and do it
+		// before picking the top N so we don't end up showing fewer than N items
+		novedadesPackages.erase(
+			std::remove_if(novedadesPackages.begin(), novedadesPackages.end(), [](const Package& pkg) {
+				return pkg.getCategory() == "theme";
+			}),
+			novedadesPackages.end()
+		);
+
+		std::sort(novedadesPackages.begin(), novedadesPackages.end(), [](const Package& left, const Package& right) {
+			if (left.getUpdatedAtTimestamp() != right.getUpdatedAtTimestamp())
+				return left.getUpdatedAtTimestamp() > right.getUpdatedAtTimestamp();
+			return left.getPackageName() < right.getPackageName();
+		});
+
+		if (novedadesPackages.size() > NOVEDADES_COUNT)
+			novedadesPackages.resize(NOVEDADES_COUNT);
+	}
+
+	// use the curated "Novedades" list when applicable, otherwise the regular (sorted) package list
+	auto& displayPackages = (curCategoryValue == "_novedades") ? novedadesPackages : packages;
+
 	// add AppCards for the packages belonging to the current category
-	for (auto &package : packages)
+	for (auto &package : displayPackages)
 	{
 		if (curCategoryValue == "_misc")
 		{
@@ -414,16 +447,16 @@ void AppList::update()
 			if (std::find(std::begin(sidebar->cat_value), std::end(sidebar->cat_value), package.getCategory()) != std::end(sidebar->cat_value))
 				continue;
 		}
-		else if (curCategoryValue != "_all" && curCategoryValue != "_search")
+		else if (curCategoryValue != "_all" && curCategoryValue != "_search" && curCategoryValue != "_novedades")
 		{
 			// if we're in a specific category, filter out package of different categories
 			if (curCategoryValue != package.getCategory())
 				continue;
 		}
 
-		if (curCategoryValue == "_all")
+		if (curCategoryValue == "_all" || curCategoryValue == "_novedades")
 		{
-			// hide themes from all
+			// hide themes from all / novedades
 			if (package.getCategory() == "theme")
 			continue;
 		}

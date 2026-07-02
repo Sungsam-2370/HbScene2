@@ -11,7 +11,7 @@ class AppList;
 #if defined(USE_OSC_BRANDING)
 #define TOTAL_CATS 6
 #else
-#define TOTAL_CATS 9
+#define TOTAL_CATS 10
 #endif
 #pragma once
 
@@ -39,7 +39,7 @@ public:
 	bool showCurrentCategory = false;
 
 	// the currently selected category index
-	int curCategory = 1; // 1 is all apps
+	int curCategory = 2; // 2 is "Novedades" (shown first on startup)
 
 	// vertical scroll offset for the category list (in pixels, scaled)
 	int scrollOffset = 0;
@@ -49,8 +49,8 @@ public:
 	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "sidebar.utilities", "sidebar.emulators", "sidebar.games", "sidebar.media" };
 	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "utilities", "emulators", "games", "media" };
 #else
-	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "N64 Nativos", "NSO Juegos Extra", "Traducciones", "Emuladores", "Ports Juegos", "Mods Juegos", "sidebar.misc" };
-	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "N64_Nativos", "NSO", "Traducciones", "Emuladores", "Ports", "Mods Juegos", "_misc" };
+	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "Novedades", "N64 Nativos", "NSO Juegos Extra", "Traducciones", "Emuladores", "Ports Juegos", "Mods Juegos", "sidebar.misc" };
+	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "_novedades", "N64_Nativos", "NSO", "Traducciones", "Emuladores", "Ports", "Mods Juegos", "_misc" };
 #endif
 
 	ImageElement* hider = nullptr;
