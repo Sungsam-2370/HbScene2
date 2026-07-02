@@ -11,7 +11,7 @@ class AppList;
 #if defined(USE_OSC_BRANDING)
 #define TOTAL_CATS 6
 #else
-#define TOTAL_CATS 10
+#define TOTAL_CATS 11
 #endif
 #pragma once
 
@@ -49,8 +49,8 @@ public:
 	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "sidebar.utilities", "sidebar.emulators", "sidebar.games", "sidebar.media" };
 	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "utilities", "emulators", "games", "media" };
 #else
-	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "Novedades", "N64 Nativos", "NSO Juegos Extra", "Traducciones", "Emuladores", "Ports Juegos", "Mods Juegos", "sidebar.misc" };
-	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "_novedades", "N64_Nativos", "NSO", "Traducciones", "Emuladores", "Ports", "Mods Juegos", "_misc" };
+	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "Novedades", "N64 Nativos", "NSO Juegos Extra", "Traducciones", "Emuladores", "Ports Juegos", "Mods Juegos", "PkUnico", "sidebar.misc" };
+	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "_novedades", "N64_Nativos", "NSO", "Traducciones", "Emuladores", "Ports", "Mods Juegos", "PkUnico", "_misc" };
 #endif
 
 	ImageElement* hider = nullptr;

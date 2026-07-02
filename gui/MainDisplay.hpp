@@ -56,11 +56,6 @@ public:
 	bool renderedSplash = false;
 	ImageElement *spinner = nullptr;
 
-	// Switch Scene validation splash
-	TextElement* switchSceneWarning = nullptr;
-	int splashWarningTimer = 0;
-	CST_Color switchSceneWarningColor = { 0xFF, 0xFF, 0xFF, 0xFF };
-
 	void playSFX();
 
 #if defined(MUSIC)

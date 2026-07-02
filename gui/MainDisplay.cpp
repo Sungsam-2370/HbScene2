@@ -17,7 +17,7 @@
 #include "ThemeManager.hpp"
 #include "ThemeScreen.hpp"
 #include "main.hpp"
-// gSwitchSceneValid definido en main.cpp, declarado en main.hpp
+// gAtmosphereValid definido en main.cpp, declarado en main.hpp
 
 using namespace std::string_literals; // for ""s
 
@@ -529,26 +529,11 @@ void MainDisplay::render(Element* parent)
 
 	renderBackground(true);
 
-	// Mostrar mensaje de advertencia sobre el splash si no paso alguna validacion
-	if (showingSplash && (!gSwitchSceneValid || !gAtmosphereValid))
-	{
-		// Crear el texto solo una vez
-		if (!switchSceneWarning)
-		{
-			std::string fullMsg = "                                 NO ESTAS USANDO ALGUN PKUNICO DEL GRUPO SWITCH SCENE\n\n                                 DESCARGAS DESHABILITADAS\n\n                                 Para poder descargar use el PkUnico del grupo Switch Scene";
-
-
-			switchSceneWarning = new TextElement(
-				fullMsg,
-				22,
-				&switchSceneWarningColor,
-				false,
-				900  // ancho maximo en px, el texto hace wrap si no entra
-			);
-			switchSceneWarning->constrain(ALIGN_CENTER_BOTH);
-			super::append(switchSceneWarning);
-		}
-	}
+	// NOTA: la validacion del hash de package3 ya no bloquea la aplicacion
+	// completa en el splash inicial. Su alcance ahora es por categoria
+	// (ver ProtectedCategories.hpp) y se avisa al usuario unicamente cuando
+	// intenta descargar un paquete de una categoria protegida sin haber
+	// pasado la validacion (ver AppDetails.cpp).
 
 	RootDisplay::render(parent);
 }
@@ -561,23 +546,6 @@ bool MainDisplay::process(InputEvents* event)
 	{
 		if (!event->noop)
 			return true; // consumir el evento sin procesarlo
-
-		// Si no paso alguna validacion, esperar ~7 segundos antes de continuar
-		// para que el usuario pueda leer el mensaje de advertencia
-		if (!gSwitchSceneValid || !gAtmosphereValid)
-		{
-			splashWarningTimer += 16;
-			if (splashWarningTimer < 7000)
-				return true;
-
-			// Pasaron los 7 segundos: limpiar el mensaje y continuar
-			if (switchSceneWarning)
-			{
-				super::remove(switchSceneWarning);
-				delete switchSceneWarning;
-				switchSceneWarning = nullptr;
-			}
-		}
 
 		showingSplash = false;
 

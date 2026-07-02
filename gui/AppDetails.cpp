@@ -19,8 +19,9 @@
 #include "AppList.hpp"
 #include "Feedback.hpp"
 #include "ThemeManager.hpp"
+#include "ProtectedCategories.hpp"
 #include "main.hpp"
-// gSwitchSceneValid se declara en main.hpp y se define en main.cpp
+// gAtmosphereValid se declara en main.hpp y se define en main.cpp
 
 int AppDetails::lastFrameTime = 99;
 
@@ -47,10 +48,15 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	cancel.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 90);
 	cancel.action = std::bind(&AppDetails::back, this);
 
-	// Si el usuario no tiene el PkUnico de Switch Scene instalado,
-	// O si el hash de sd:atmosphere/package3 no es válido,
-	// mostrar un dialogo informativo en lugar de cerrar el programa.
-	if ((!gSwitchSceneValid || !gAtmosphereValid) && this->package->getStatus() != INSTALLED)
+	// La validacion del hash de sd:atmosphere/package3 (ver checkAtmosphereHash()
+	// en main.cpp) ya NO bloquea la aplicacion completa. Su alcance se redujo:
+	// solo restringe la descarga de paquetes que pertenezcan a una categoria
+	// "protegida" (ver ProtectedCategories.hpp, por defecto solo "PkUnico").
+	// Cualquier otra categoria permite descargar sin importar el resultado
+	// de la validacion.
+	bool categoryRequiresValidation = isCategoryProtected(this->package->getCategory());
+
+	if (categoryRequiresValidation && !gAtmosphereValid && this->package->getStatus() != INSTALLED)
 	{
 		noValidationDialog = new AlertDialog(
 			"Acceso restringido",
