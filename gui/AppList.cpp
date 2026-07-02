@@ -432,7 +432,7 @@ void AppList::update()
 		});
 
 		if (novedadesPackages.size() > NOVEDADES_COUNT)
-			novedadesPackages.resize(NOVEDADES_COUNT);
+			novedadesPackages.erase(novedadesPackages.begin() + NOVEDADES_COUNT, novedadesPackages.end());
 	}
 
 	// use the curated "Novedades" list when applicable, otherwise the regular (sorted) package list
