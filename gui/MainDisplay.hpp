@@ -22,9 +22,13 @@
 #endif
 
 #ifdef USE_OSC_BRANDING
-#define LOGO_PATH RAMFS "res/open-hbas-logo.png"
+#define LOGO_PATH       RAMFS "res/open-hbas-logo.png"
+#define LOGO_PATH_UNICO LOGO_PATH // esta rama de branding no usa el icono alterno
 #else
-#define LOGO_PATH RAMFS "res/icon.png"
+#define LOGO_PATH       RAMFS "res/icon.png"
+// icono alterno que se usa cuando el hash de sd:atmosphere/package3 es
+// valido (ver gAtmosphereValid en main.hpp / Sidebar.cpp)
+#define LOGO_PATH_UNICO RAMFS "res/icon_unico.png"
 #endif
 
 class MainDisplay : public RootDisplay

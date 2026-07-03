@@ -3,13 +3,17 @@
 #include <algorithm>
 #include "ThemeManager.hpp"
 #include "SupporterBenefit.hpp"
+#include "main.hpp"
 
 #ifndef APP_VERSION
 #define APP_VERSION "0.0.0"
 #endif
 
 Sidebar::Sidebar()
-	: logo(LOGO_PATH)
+	// Si el hash de sd:atmosphere/package3 es valido (gAtmosphereValid,
+	// ver main.hpp/main.cpp), se usa el icono alterno "icon_unico.png".
+	// Si no es valido, se deja el icono normal "icon.png" (LOGO_PATH).
+	: logo(gAtmosphereValid ? LOGO_PATH_UNICO : LOGO_PATH)
 #if defined(DEBUG_BUILD) && !defined(WII_MOCK)
 	, title("hb-appstore Dev Build", 22, &HBAS::ThemeManager::textPrimary)
 	, subtitle("v" APP_VERSION " (" __DATE__ ")", 18, &HBAS::ThemeManager::textPrimary)
