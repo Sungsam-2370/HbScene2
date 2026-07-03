@@ -2,6 +2,7 @@
 #include "../libs/chesto/src/Constraint.hpp"
 #include <algorithm>
 #include "ThemeManager.hpp"
+#include "SupporterBenefit.hpp"
 
 #ifndef APP_VERSION
 #define APP_VERSION "0.0.0"
@@ -56,6 +57,16 @@ Sidebar::Sidebar()
 	subtitle.position(105/SCALER, 75/SCALER);
 	super::append(&subtitle);
 
+	// Si la consola fue reconocida como beneficiaria (ver SupporterBenefit.hpp),
+	// mostrar un texto de agradecimiento justo encima del titulo, para que
+	// se pueda confirmar a simple vista que la verificacion de apoyo paso.
+	if (gIsSupporter)
+	{
+		supporterBadge = new TextElement("Gracias por tu apoyo", 15/SCALER, &supporterBadgeColor);
+		supporterBadge->position(105/SCALER, 18/SCALER);
+		super::append(supporterBadge);
+	}
+
 #if defined(USE_OSC_BRANDING)
 	// make the icon larger
 	logo.setScaleMode(SCALE_PROPORTIONAL_NO_BG);
@@ -102,6 +113,8 @@ Sidebar::~Sidebar()
 		delete hider;
 	if (hint)
 		delete hint;
+	if (supporterBadge)
+		delete supporterBadge;
 }
 
 void Sidebar::addHints()

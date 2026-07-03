@@ -26,9 +26,18 @@ static const char* kBackupsDir = "sdmc:/atmosphere/automatic_backups";
 static const char* kBackupSuffix = "_PRODINFO.bin";
 static const size_t kBackupIdLength = 14;
 
+// Por privacidad, NO se compara ni se conserva el identificador completo
+// de 14 caracteres: solo se usan los ULTIMOS 7 caracteres (informacion
+// parcial) tanto para comparar contra apoyo.json como para todo lo demas
+// (por ejemplo el "gracias por tu apoyo" en el sidebar).
+static const size_t kCompareIdLength = 7;
+
 // ---------------------------------------------------------------------------
 // Revisa si un nombre de archivo cumple con el patron de backup de PRODINFO
-// y, si es asi, deja el identificador de 14 caracteres en outId.
+// (14 caracteres alfanumericos + sufijo). El patron completo se usa SOLO
+// para validar el nombre del archivo; lo que se devuelve en outId son
+// unicamente los ULTIMOS 7 caracteres (informacion parcial), que es lo
+// unico que se conserva en memoria y se compara contra apoyo.json.
 // ---------------------------------------------------------------------------
 static bool extractBackupId(const std::string& filename, std::string& outId)
 {
@@ -40,20 +49,21 @@ static bool extractBackupId(const std::string& filename, std::string& outId)
 	if (filename.compare(kBackupIdLength, suffixLen, kBackupSuffix) != 0)
 		return false;
 
-	std::string candidate = filename.substr(0, kBackupIdLength);
-	for (char c : candidate)
+	std::string fullId = filename.substr(0, kBackupIdLength);
+	for (char c : fullId)
 	{
 		if (!std::isalnum(static_cast<unsigned char>(c)))
 			return false;
 	}
 
-	outId = candidate;
+	// solo nos quedamos con los ultimos 7 caracteres (informacion parcial)
+	outId = fullId.substr(kBackupIdLength - kCompareIdLength, kCompareIdLength);
 	return true;
 }
 
 // ---------------------------------------------------------------------------
-// Recorre sdmc:/atmosphere/automatic_backups/ y junta todos los
-// identificadores de 14 caracteres encontrados en archivos *_PRODINFO.bin
+// Recorre sdmc:/atmosphere/automatic_backups/ y junta los identificadores
+// PARCIALES (ultimos 7 caracteres) de cada archivo *_PRODINFO.bin valido
 // (normalmente solo deberia existir uno, pero se juntan todos por si acaso)
 // ---------------------------------------------------------------------------
 static std::vector<std::string> findLocalBackupIds()
@@ -131,7 +141,10 @@ bool checkSupporterStatus()
 		return false;
 	}
 
-	// 4. comparar cada id local contra la lista de apoyo.json
+	// 4. comparar cada id local (parcial, 7 caracteres) contra la lista de
+	//    apoyo.json. Por compatibilidad, si en apoyo.json quedara guardado
+	//    un id mas largo (ej. el formato viejo de 14 caracteres), solo se
+	//    comparan sus ULTIMOS 7 caracteres — nunca se usan mas de 7.
 	const rapidjson::Value& supporterIds = doc["ids"];
 	for (rapidjson::SizeType i = 0; i < supporterIds.Size(); i++)
 	{
@@ -139,6 +152,8 @@ bool checkSupporterStatus()
 			continue;
 
 		std::string supporterId = supporterIds[i].GetString();
+		if (supporterId.size() > kCompareIdLength)
+			supporterId = supporterId.substr(supporterId.size() - kCompareIdLength);
 
 		for (const std::string& localId : localIds)
 		{

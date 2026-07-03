@@ -66,6 +66,12 @@ private:
 	ImageElement logo;
 	TextElement title;
 	TextElement subtitle;
+
+	// "Gracias por tu apoyo" — solo se crea/muestra si gIsSupporter es true
+	// (ver SupporterBenefit.hpp). Sirve como confirmacion visual de que la
+	// consola fue reconocida como beneficiaria.
+	TextElement* supporterBadge = nullptr;
+	CST_Color supporterBadgeColor = { 0xFF, 0xD7, 0x00, 0xff }; // dorado
 };
 
 #if defined(USE_OSC_BRANDING)
