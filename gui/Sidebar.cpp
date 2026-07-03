@@ -355,6 +355,12 @@ void Sidebar::render(Element* parent)
 	title.render(this);
 	subtitle.render(this);
 
+	// "Gracias por tu apoyo" (si aplica) — se renderiza igual que logo/title/subtitle,
+	// ya que Sidebar::render() dibuja estos elementos manualmente en vez de recorrer
+	// automaticamente todos los hijos agregados con super::append()
+	if (supporterBadge)
+		supporterBadge->render(this);
+
 	// Render any remaining hint elements (also unclipped)
 	if (hider) hider->render(this);
 	if (hint)  hint->render(this);
