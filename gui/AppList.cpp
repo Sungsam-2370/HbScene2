@@ -177,7 +177,7 @@ bool AppList::process(InputEvents* event)
 	// also make sure the children elements exist before trying the keyboard
 	// AND we're actually on the search category
 	// also if we're not in touchmode, always go in here regardless of any button presses (user can only interact with keyboard)
-	bool keyboardIsShowing = sidebar && sidebar->curCategory == 0 && !keyboard.hidden;
+	bool keyboardIsShowing = sidebar && sidebar->searchModeActive && !keyboard.hidden;
 	if (keyboardIsShowing && ((event->isTouchDown() && event->touchIn(keyboard.x, keyboard.y, keyboard.width + 305, keyboard.height + 200)) || !touchMode))
 	{
 		// wow I'm surprised this still works with the chesto keyboard
@@ -395,7 +395,7 @@ void AppList::update()
 
 	// all packages TODO: move some of this filtering logic into main get library
 	// if it's a search, do a search query through get rather than using all packages
-	auto packages = (curCategoryValue == "_search")
+	auto packages = (sidebar->searchModeActive)
 		? get->search(sidebar->searchQuery)
 		: get->list();
 
@@ -447,7 +447,7 @@ void AppList::update()
 			if (std::find(std::begin(sidebar->cat_value), std::end(sidebar->cat_value), package.getCategory()) != std::end(sidebar->cat_value))
 				continue;
 		}
-		else if (curCategoryValue != "_all" && curCategoryValue != "_search" && curCategoryValue != "_novedades")
+		else if (!sidebar->searchModeActive && curCategoryValue != "_all" && curCategoryValue != "_novedades")
 		{
 			// if we're in a specific category, filter out package of different categories
 			if (curCategoryValue != package.getCategory())
@@ -481,7 +481,7 @@ void AppList::update()
 #endif
 
 	// update the view for the current category
-	if (curCategoryValue == "_search")
+	if (sidebar->searchModeActive)
 	{
 		// add the keyboard
 		keyboardBtn.position(quitBtn.x - 20 - keyboardBtn.width, quitBtn.y);

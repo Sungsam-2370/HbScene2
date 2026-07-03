@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <cstdint>
 #include <sys/stat.h>
+#include <sstream>
+#include <vector>
+#include <algorithm>
 #include <filesystem>
 #include <unordered_set>
 #include "../libs/get/src/Get.hpp"
@@ -211,6 +214,53 @@ bool MainDisplay::checkMetaRepoForUpdates(Get* get) {
 // Retorna true si el usuario actualizo (para que el llamador pueda detener
 // la carga normal si lo desea), false en cualquier otro caso.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// isVersionNewer()
+// Compara dos versiones con formato "X.Y.Z" (numero de partes libre) de
+// forma NUMERICA, componente por componente — NO como texto. Con una
+// comparacion de texto simple, "10.0.0" se veria como "menor" que "9.0.0",
+// y ademas cualquier version DISTINTA (mayor o menor) disparaba el aviso
+// de actualizacion. Con esto, solo se considera "mas nueva" si realmente
+// lo es numericamente.
+//
+// Devuelve true si `remote` es mayor que `local`.
+// ---------------------------------------------------------------------------
+static std::vector<int> parseVersionParts(const std::string& version)
+{
+	std::vector<int> parts;
+	std::stringstream ss(version);
+	std::string part;
+
+	while (std::getline(ss, part, '.'))
+	{
+		try {
+			parts.push_back(std::stoi(part));
+		} catch (...) {
+			parts.push_back(0); // parte no numerica, tratar como 0
+		}
+	}
+
+	return parts;
+}
+
+static bool isVersionNewer(const std::string& remote, const std::string& local)
+{
+	std::vector<int> remoteParts = parseVersionParts(remote);
+	std::vector<int> localParts = parseVersionParts(local);
+
+	size_t maxParts = std::max(remoteParts.size(), localParts.size());
+	for (size_t i = 0; i < maxParts; i++)
+	{
+		int r = (i < remoteParts.size()) ? remoteParts[i] : 0;
+		int l = (i < localParts.size()) ? localParts[i] : 0;
+
+		if (r != l)
+			return r > l;
+	}
+
+	return false; // son iguales
+}
+
 bool MainDisplay::checkSelfUpdate()
 {
 #if !defined(SWITCH)
@@ -235,8 +285,9 @@ bool MainDisplay::checkSelfUpdate()
 	std::string remoteVersion = d["version"].GetString();
 	std::string downloadUrl   = d["download_url"].GetString();
 
-	// Comparacion simple: si son identicas no hay nada que hacer
-	if (remoteVersion == APP_VERSION) {
+	// Solo se considera actualizacion disponible si la version remota es
+	// NUMERICAMENTE mayor a la actual (no simplemente "distinta").
+	if (!isVersionNewer(remoteVersion, APP_VERSION)) {
 		std::cout << "[self-update] ya en la version mas reciente (" << APP_VERSION << ")" << std::endl;
 		return false;
 	}

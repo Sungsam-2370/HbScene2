@@ -330,7 +330,7 @@ void AppDetails::moreByAuthor()
 {
 	const char* author = this->package->getAuthor().c_str();
 	appList->sidebar->searchQuery = std::string(author);
-	appList->sidebar->curCategory = 0;
+	appList->sidebar->searchModeActive = true;
 	appList->update();
 	appList->y = 0;
 	appList->keyboard.hidden = true;

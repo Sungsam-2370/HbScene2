@@ -11,7 +11,7 @@ class AppList;
 #if defined(USE_OSC_BRANDING)
 #define TOTAL_CATS 6
 #else
-#define TOTAL_CATS 11
+#define TOTAL_CATS 10
 #endif
 #pragma once
 
@@ -29,6 +29,13 @@ public:
 
 	std::string searchQuery = "";
 
+	// true cuando se esta mostrando resultados de busqueda (usado por
+	// AppDetails::moreByAuthor()). Ya NO depende de que exista una
+	// categoria "Buscar" visible en el menu: es un estado independiente,
+	// asi se puede seguir usando "mas por este autor" aunque el usuario
+	// no tenga forma de entrar a busqueda manualmente desde el sidebar.
+	bool searchModeActive = false;
+
 	AppList* appList = NULL;
 
 	void render(Element* parent);
@@ -39,7 +46,7 @@ public:
 	bool showCurrentCategory = false;
 
 	// the currently selected category index
-	int curCategory = 2; // 2 is "Novedades" (shown first on startup)
+	int curCategory = 0; // 0 es "Novedades" (primera categoria, se muestra al iniciar)
 
 	// vertical scroll offset for the category list (in pixels, scaled)
 	int scrollOffset = 0;
@@ -49,8 +56,8 @@ public:
 	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "sidebar.utilities", "sidebar.emulators", "sidebar.games", "sidebar.media" };
 	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "utilities", "emulators", "games", "media" };
 #else
-	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "Novedades", "N64 Nativos", "NSO Juegos Extra", "Traducciones", "Emuladores", "Ports Juegos", "Mods Juegos", "PkUnico", "sidebar.misc" };
-	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "_novedades", "N64_Nativos", "NSO", "Traducciones", "Emuladores", "Ports", "Mods Juegos", "PkUnico", "_misc" };
+	const char* cat_names[TOTAL_CATS] = { "Novedades", "sidebar.all", "N64 Nativos", "NSO Juegos Extra", "Traducciones", "Emuladores", "Ports Juegos", "Mods Juegos", "PkUnico", "sidebar.misc" };
+	const char* cat_value[TOTAL_CATS] = { "_novedades", "_all", "N64_Nativos", "NSO", "Traducciones", "Emuladores", "Ports", "Mods Juegos", "PkUnico", "_misc" };
 #endif
 
 	ImageElement* hider = nullptr;

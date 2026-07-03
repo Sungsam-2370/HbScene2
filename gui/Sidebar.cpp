@@ -247,6 +247,10 @@ bool Sidebar::process(InputEvents* event)
 				// saw touchup on a category, adjust active category
 				this->curCategory = x;
 
+				// al elegir una categoria normal del menu, salir del modo
+				// busqueda (que solo se activa via "mas por este autor")
+				this->searchModeActive = false;
+
 				// since we updated the active category, we need to update the app listing
 				if (this->appList != NULL)
 				{
