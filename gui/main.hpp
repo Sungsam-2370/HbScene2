@@ -37,6 +37,48 @@ inline constexpr auto _OBF_WIIU_REPO   = ObfStr("https://wiiu.cdn.fortheusers.or
 inline constexpr auto _OBF_3DS_REPO    = ObfStr("https://3ds.apps.fortheusers.org");
 inline constexpr auto _OBF_WII_REPO    = ObfStr("https://hbb1.oscwii.org");
 
+// Clave usada para desencriptar apoyo.json (ver SimpleCipher.hpp/.cpp y
+// SupporterBenefit.cpp).
+//
+// Esto usa un XOR de VARIOS BYTES (una "clave" de texto que se repite),
+// no de un solo byte como URL_XOR_KEY. La diferencia importa: un XOR de
+// un solo byte solo tiene 256 combinaciones — alguien con un editor
+// hexadecimal y tiempo puede probarlas todas a mano hasta que el
+// resultado se vea como texto legible. Con una clave de varios bytes que
+// se repite, ya no alcanza con probar valores de un byte: primero hay
+// que notar que se repite, deducir cuantos bytes de largo tiene (analisis
+// mas involucrado, no algo que se hace "a ojo" con un editor hex), y
+// recien despues intentar recuperar el contenido. Entre mas larga la
+// clave, mas dificil.
+//
+// CAMBIA APOYO_XOR_KEY por la tuya (largo libre, mientras mas larga
+// mejor, evita palabras obvias). Tambien cambia el texto de
+// _OBF_APOYO_KEY. Ambos deben coincidir EXACTO con lo que uses en el
+// script que encripta apoyo.json antes de subirlo al repositorio (ver
+// herramientas/encrypt_apoyo.py).
+inline constexpr char APOYO_XOR_KEY[] = "Xk9#mQ2vL7pR4wZ!nB6tY3sD8fH1cJ5g";
+
+template<size_t N>
+struct ObfStr2 {
+    char data[N]{};
+
+    constexpr ObfStr2(const char (&str)[N]) {
+        constexpr size_t keyLen = sizeof(APOYO_XOR_KEY) - 1;
+        for (size_t i = 0; i < N; i++)
+            data[i] = str[i] ^ APOYO_XOR_KEY[i % keyLen];
+    }
+
+    std::string decode() const {
+        constexpr size_t keyLen = sizeof(APOYO_XOR_KEY) - 1;
+        std::string out(N - 1, '\0');
+        for (size_t i = 0; i < N - 1; i++)
+            out[i] = data[i] ^ APOYO_XOR_KEY[i % keyLen];
+        return out;
+    }
+};
+
+inline constexpr auto _OBF_APOYO_KEY = ObfStr2("CambiaEstaClaveHbScene2026");
+
 // Macros de acceso — el resto del codigo las usa igual que antes.
 // decode() se llama una sola vez por uso, el resultado es un std::string normal.
 #define META_REPO   (_OBF_META_REPO.decode())
@@ -44,6 +86,7 @@ inline constexpr auto _OBF_WII_REPO    = ObfStr("https://hbb1.oscwii.org");
 #define WIIU_REPO   (_OBF_WIIU_REPO.decode())
 #define _3DS_REPO   (_OBF_3DS_REPO.decode())
 #define WII_REPO    (_OBF_WII_REPO.decode())
+#define APOYO_KEY   (_OBF_APOYO_KEY.decode())
 
 // DEFAULT_REPO segun plataforma (igual que antes)
 #if defined(SWITCH)

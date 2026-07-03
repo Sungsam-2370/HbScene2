@@ -12,6 +12,7 @@
 #include <iostream>
 
 #include "SupporterBenefit.hpp"
+#include "SimpleCipher.hpp"
 #include "main.hpp"
 
 #include "../libs/get/src/Utils.hpp"
@@ -32,6 +33,15 @@ static const size_t kBackupIdLength = 14;
 // parcial) tanto para comparar contra apoyo.json como para todo lo demas
 // (por ejemplo el "gracias por tu apoyo" en el sidebar).
 static const size_t kCompareIdLength = 7;
+
+// ---------------------------------------------------------------------------
+// Acceso alterno para quien no quiera compartir su numero de serie (o ya
+// lo haya borrado). Si este archivo existe en la misma carpeta que los
+// backups de PRODINFO, se le da el mismo acceso que a un beneficiario
+// validado por apoyo.json. Se comparte manualmente (ej. por el staff de
+// Switch Scene) a quien corresponda; no requiere conexion a internet.
+// ---------------------------------------------------------------------------
+static const char* kManualAccessFileName = "ApoyoGrupo0042.ini";
 
 // ---------------------------------------------------------------------------
 // Revisa si un nombre de archivo cumple con el patron de backup de PRODINFO
@@ -92,15 +102,21 @@ static bool findLatestLocalBackupId(std::string& outId)
 		if (!extractBackupId(name, id))
 			continue;
 
+		// intentar usar la fecha de modificacion para preferir el backup
+		// mas reciente cuando hay varios. Si stat() falla por cualquier
+		// razon, el archivo NO se descarta — sigue siendo un candidato
+		// valido (solo no participa en la comparacion de fecha). Antes,
+		// un fallo de stat() aqui hacia "continue" y el archivo se
+		// perdia por completo, aunque su nombre fuera valido.
 		std::string fullPath = std::string(kBackupsDir) + "/" + name;
 		struct stat fileInfo{};
-		if (stat(fullPath.c_str(), &fileInfo) != 0)
-			continue;
+		bool gotStat = (stat(fullPath.c_str(), &fileInfo) == 0);
+		time_t mtime = gotStat ? fileInfo.st_mtime : 0;
 
-		if (!found || fileInfo.st_mtime > latestMtime)
+		if (!found || (gotStat && mtime > latestMtime))
 		{
 			found = true;
-			latestMtime = fileInfo.st_mtime;
+			latestMtime = mtime;
 			latestId = id;
 		}
 	}
@@ -113,6 +129,22 @@ static bool findLatestLocalBackupId(std::string& outId)
 	return found;
 }
 
+// ---------------------------------------------------------------------------
+// Revisa si existe sdmc:/atmosphere/automatic_backups/ApoyoGrupo0042.ini
+// No importa su contenido, solo que exista.
+// ---------------------------------------------------------------------------
+static bool checkManualAccessFile()
+{
+	std::string path = std::string(kBackupsDir) + "/" + kManualAccessFileName;
+	struct stat fileInfo{};
+	bool exists = (stat(path.c_str(), &fileInfo) == 0);
+
+	if (exists)
+		std::cout << "[Supporter] Acceso alterno detectado (" << kManualAccessFileName << ")" << std::endl;
+
+	return exists;
+}
+
 bool checkSupporterStatus()
 {
 	// 1. buscar el backup local de PRODINFO mas reciente
@@ -120,7 +152,9 @@ bool checkSupporterStatus()
 	if (!findLatestLocalBackupId(localId))
 	{
 		std::cout << "[Supporter] No se encontro ningun backup de PRODINFO en " << kBackupsDir << std::endl;
-		return false;
+		// sin backup no se puede comparar contra apoyo.json, pero todavia
+		// puede tener acceso por el archivo alterno
+		return checkManualAccessFile();
 	}
 
 	// 2. descargar apoyo.json del mismo repositorio que valido.json
@@ -130,15 +164,15 @@ bool checkSupporterStatus()
 	// GitHub la app podria seguir viendo la version vieja durante ese
 	// tiempo. Se agrega un parametro con la hora actual para que cada
 	// consulta sea una URL distinta y el CDN no devuelva algo cacheado.
-	std::string jsonData;
+	std::string fileData;
 	const std::string url = std::string(SWITCH_REPO) + "/apoyo.json?nocache=" + std::to_string((long long)time(nullptr));
 
 	bool downloaded = false;
 	const int maxAttempts = 5;
 	for (int attempt = 1; attempt <= maxAttempts; attempt++)
 	{
-		jsonData.clear();
-		if (downloadFileToMemory(url, &jsonData))
+		fileData.clear();
+		if (downloadFileToMemory(url, &fileData))
 		{
 			downloaded = true;
 			break;
@@ -157,17 +191,44 @@ bool checkSupporterStatus()
 	if (!downloaded)
 	{
 		std::cout << "[Supporter] No se pudo descargar apoyo.json" << std::endl;
-		return false;
+		return checkManualAccessFile();
 	}
 
-	// 3. parsear el JSON
+	// 3. intentar leer el contenido descargado TAL CUAL como JSON primero.
+	// Esto hace la transicion a apoyo.json encriptado segura: si por
+	// cualquier razon el archivo que esta publicado en el repositorio
+	// todavia es JSON en texto plano (ej. no se subio la version
+	// encriptada con encrypt_apoyo.py, o se subio sin querer), el
+	// programa lo sigue reconociendo en vez de fallar silenciosamente.
 	rapidjson::Document doc;
-	doc.Parse(jsonData.c_str());
+	doc.Parse(fileData.data(), fileData.size());
+	bool esTextoPlanoValido = !doc.HasParseError() && doc.IsObject() && doc.HasMember("ids") && doc["ids"].IsArray();
 
-	if (doc.HasParseError() || !doc.IsObject() || !doc.HasMember("ids") || !doc["ids"].IsArray())
+	if (!esTextoPlanoValido)
 	{
-		std::cout << "[Supporter] apoyo.json descargado pero con formato invalido" << std::endl;
-		return false;
+		// 3b. no era JSON plano valido: intentar desencriptar.
+		// apoyo.json se publica como base64(RC4(json, APOYO_KEY)) para
+		// que alguien que entre al repositorio no vea la lista de
+		// seriales parciales en texto plano (ver SimpleCipher.hpp/.cpp).
+		std::string cipherBytes = base64Decode(fileData);
+		std::string jsonData = rc4(cipherBytes, APOYO_KEY);
+
+		// se usa Parse(ptr, len) en vez de Parse(c_str()) porque el
+		// resultado desencriptado se maneja como bytes con tamaño
+		// explicito, sin asumir que este termina en un caracter nulo
+		doc.Parse(jsonData.data(), jsonData.size());
+
+		if (doc.HasParseError() || !doc.IsObject() || !doc.HasMember("ids") || !doc["ids"].IsArray())
+		{
+			std::cout << "[Supporter] apoyo.json invalido (ni texto plano ni desencriptado con la clave actual dieron JSON valido)" << std::endl;
+			return checkManualAccessFile();
+		}
+
+		std::cout << "[Supporter] apoyo.json leido desencriptado" << std::endl;
+	}
+	else
+	{
+		std::cout << "[Supporter] apoyo.json leido en texto plano (sin encriptar)" << std::endl;
 	}
 
 	// 4. comparar el id local (parcial, 7 caracteres, del backup mas reciente)
@@ -192,5 +253,8 @@ bool checkSupporterStatus()
 	}
 
 	std::cout << "[Supporter] El id local (" << localId << ") no coincide con apoyo.json" << std::endl;
-	return false;
+
+	// 5. metodo alterno: no coincidio por id, pero puede tener el archivo
+	//    de acceso manual compartido para casos especiales
+	return checkManualAccessFile();
 }
