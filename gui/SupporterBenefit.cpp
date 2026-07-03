@@ -5,10 +5,11 @@
 #endif
 
 #include <dirent.h>
+#include <sys/stat.h>
 #include <cctype>
 #include <cstring>
+#include <ctime>
 #include <iostream>
-#include <vector>
 
 #include "SupporterBenefit.hpp"
 #include "main.hpp"
@@ -62,47 +63,75 @@ static bool extractBackupId(const std::string& filename, std::string& outId)
 }
 
 // ---------------------------------------------------------------------------
-// Recorre sdmc:/atmosphere/automatic_backups/ y junta los identificadores
-// PARCIALES (ultimos 7 caracteres) de cada archivo *_PRODINFO.bin valido
-// (normalmente solo deberia existir uno, pero se juntan todos por si acaso)
+// Recorre sdmc:/atmosphere/automatic_backups/ y devuelve el identificador
+// PARCIAL (ultimos 7 caracteres) del backup MAS RECIENTE (por fecha de
+// modificacion) entre los archivos *_PRODINFO.bin validos.
+//
+// Solo se usa el mas reciente (en vez de comparar contra todos) para que
+// un backup viejo que haya quedado en la SD no pueda producir un falso
+// positivo/negativo: siempre se evalua el backup vigente de la consola.
 // ---------------------------------------------------------------------------
-static std::vector<std::string> findLocalBackupIds()
+static bool findLatestLocalBackupId(std::string& outId)
 {
-	std::vector<std::string> ids;
-
 	DIR* dir = opendir(kBackupsDir);
 	if (!dir)
 	{
 		std::cout << "[Supporter] No se pudo abrir " << kBackupsDir << std::endl;
-		return ids;
+		return false;
 	}
+
+	bool found = false;
+	time_t latestMtime = 0;
+	std::string latestId;
 
 	struct dirent* entry;
 	while ((entry = readdir(dir)) != nullptr)
 	{
 		std::string name(entry->d_name);
 		std::string id;
-		if (extractBackupId(name, id))
-			ids.push_back(id);
+		if (!extractBackupId(name, id))
+			continue;
+
+		std::string fullPath = std::string(kBackupsDir) + "/" + name;
+		struct stat fileInfo{};
+		if (stat(fullPath.c_str(), &fileInfo) != 0)
+			continue;
+
+		if (!found || fileInfo.st_mtime > latestMtime)
+		{
+			found = true;
+			latestMtime = fileInfo.st_mtime;
+			latestId = id;
+		}
 	}
 
 	closedir(dir);
-	return ids;
+
+	if (found)
+		outId = latestId;
+
+	return found;
 }
 
 bool checkSupporterStatus()
 {
-	// 1. buscar identificadores locales de PRODINFO
-	std::vector<std::string> localIds = findLocalBackupIds();
-	if (localIds.empty())
+	// 1. buscar el backup local de PRODINFO mas reciente
+	std::string localId;
+	if (!findLatestLocalBackupId(localId))
 	{
 		std::cout << "[Supporter] No se encontro ningun backup de PRODINFO en " << kBackupsDir << std::endl;
 		return false;
 	}
 
 	// 2. descargar apoyo.json del mismo repositorio que valido.json
+	//
+	// raw.githubusercontent.com esta detras de un CDN (Fastly) que cachea
+	// cada URL por varios minutos. Sin esto, tras editar apoyo.json en
+	// GitHub la app podria seguir viendo la version vieja durante ese
+	// tiempo. Se agrega un parametro con la hora actual para que cada
+	// consulta sea una URL distinta y el CDN no devuelva algo cacheado.
 	std::string jsonData;
-	const std::string url = std::string(SWITCH_REPO) + "/apoyo.json";
+	const std::string url = std::string(SWITCH_REPO) + "/apoyo.json?nocache=" + std::to_string((long long)time(nullptr));
 
 	bool downloaded = false;
 	const int maxAttempts = 5;
@@ -141,10 +170,10 @@ bool checkSupporterStatus()
 		return false;
 	}
 
-	// 4. comparar cada id local (parcial, 7 caracteres) contra la lista de
-	//    apoyo.json. Por compatibilidad, si en apoyo.json quedara guardado
-	//    un id mas largo (ej. el formato viejo de 14 caracteres), solo se
-	//    comparan sus ULTIMOS 7 caracteres — nunca se usan mas de 7.
+	// 4. comparar el id local (parcial, 7 caracteres, del backup mas reciente)
+	//    contra la lista de apoyo.json. Por compatibilidad, si en apoyo.json
+	//    quedara guardado un id mas largo (ej. el formato viejo de 14
+	//    caracteres), solo se comparan sus ULTIMOS 7 caracteres.
 	const rapidjson::Value& supporterIds = doc["ids"];
 	for (rapidjson::SizeType i = 0; i < supporterIds.Size(); i++)
 	{
@@ -155,17 +184,13 @@ bool checkSupporterStatus()
 		if (supporterId.size() > kCompareIdLength)
 			supporterId = supporterId.substr(supporterId.size() - kCompareIdLength);
 
-		for (const std::string& localId : localIds)
+		if (localId == supporterId)
 		{
-			if (localId == supporterId)
-			{
-				std::cout << "[Supporter] Usuario beneficiario (id " << localId << ")" << std::endl;
-				return true;
-			}
+			std::cout << "[Supporter] Usuario beneficiario (id " << localId << ")" << std::endl;
+			return true;
 		}
 	}
 
-	std::cout << "[Supporter] Ninguno de los " << localIds.size()
-	          << " id(s) locales coincide con apoyo.json" << std::endl;
+	std::cout << "[Supporter] El id local (" << localId << ") no coincide con apoyo.json" << std::endl;
 	return false;
 }

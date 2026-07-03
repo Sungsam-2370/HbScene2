@@ -28,6 +28,7 @@
 #endif
 
 #include <sys/stat.h>
+#include <ctime>
 #include "../libs/chesto/libs/resinfs/include/romfs-wiiu.h"
 
 #include "../libs/get/src/Get.hpp"
@@ -196,8 +197,14 @@ static bool checkAtmosphereHash()
 	// Se reintenta varias veces con espera entre intentos, porque al
 	// arrancar la consola la conexion WiFi puede tardar unos segundos
 	// en quedar lista despues de init_networking()
+	//
+	// raw.githubusercontent.com esta detras de un CDN (Fastly) que cachea
+	// cada URL por varios minutos. Sin esto, tras editar valido.json en
+	// GitHub la app podria seguir viendo la version vieja durante ese
+	// tiempo. Se agrega un parametro con la hora actual para que cada
+	// consulta sea una URL distinta y el CDN no devuelva algo cacheado.
 	std::string jsonData;
-	const std::string url = std::string(SWITCH_REPO) + "/valido.json";
+	const std::string url = std::string(SWITCH_REPO) + "/valido.json?nocache=" + std::to_string((long long)time(nullptr));
 
 	// Diagnostico extra: verificar si el certificado SSL realmente es
 	// accesible desde el RomFS en este momento, usando fopen directo
