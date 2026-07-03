@@ -20,6 +20,8 @@
 #include "Feedback.hpp"
 #include "ThemeManager.hpp"
 #include "ProtectedCategories.hpp"
+#include "RecentContentPolicy.hpp"
+#include "SupporterBenefit.hpp"
 #include "main.hpp"
 // gAtmosphereValid se declara en main.hpp y se define en main.cpp
 
@@ -55,8 +57,19 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	// Cualquier otra categoria permite descargar sin importar el resultado
 	// de la validacion.
 	bool categoryRequiresValidation = isCategoryProtected(this->package->getCategory());
+	bool blockedByCategoryValidation = categoryRequiresValidation && !gAtmosphereValid;
 
-	if (categoryRequiresValidation && !gAtmosphereValid && this->package->getStatus() != INSTALLED)
+	// Restriccion independiente por antiguedad: los usuarios que NO son
+	// beneficiarios (ver SupporterBenefit.hpp) deben esperar a que un
+	// aporte tenga mas de kRecentContentRestrictionDays dias desde su
+	// ultima actualizacion (repo.json -> "updated"). Esto aplica sin
+	// importar la categoria, y es independiente de la validacion de arriba:
+	// un beneficiario que descarga de una categoria protegida SIGUE
+	// necesitando pasar la validacion de hash.
+	bool isRecent = isPackageRecentlyUpdated(this->package->getUpdatedAtTimestamp());
+	bool blockedByRecency = isRecent && !gIsSupporter;
+
+	if (blockedByCategoryValidation && this->package->getStatus() != INSTALLED)
 	{
 		noValidationDialog = new AlertDialog(
 			"Acceso restringido",
@@ -71,6 +84,30 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 			noValidationDialog->show();
 		};
 		download.updateText("Requiere PkUnico");
+	}
+	else if (blockedByRecency && this->package->getStatus() != INSTALLED)
+	{
+		std::stringstream recentMsg;
+		recentMsg << "Este aporte es reciente, los aportes\n"
+		           << "recientes solo pueden ser descargados\n"
+		           << "por miembros que apoyaron, espera unos\n"
+		           << "dias, hasta que el aporte tenga una fecha\n"
+		           << "de actualizacion mayor a " << kRecentContentRestrictionDays << " dias,\n"
+		           << "despues de esa fecha sera de libre descarga.";
+
+		recentContentDialog = new AlertDialog(
+			"Aporte reciente",
+			recentMsg.str()
+		);
+		recentContentDialog->onConfirm = [this]() {
+			recentContentDialog->hidden = true;
+		};
+		super::append(recentContentDialog);
+
+		download.action = [this]() {
+			recentContentDialog->show();
+		};
+		download.updateText("Aporte reciente");
 	}
 
 #if defined(_3DS) || defined(_3DS_MOCK)
@@ -457,6 +494,9 @@ void AppDetails::render(Element* parent)
 	// siempre por encima del contenido y de las imagenes/descripcion
 	if (noValidationDialog)
 		noValidationDialog->render(parent);
+
+	if (recentContentDialog)
+		recentContentDialog->render(parent);
 }
 
 int AppDetails::updatePopupStatus(int status, int num, int num_total)

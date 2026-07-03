@@ -66,6 +66,7 @@ private:
 	TextElement downloadStatus;
 	TextElement downloadPercent;
 	AlertDialog* noValidationDialog = nullptr;
+	AlertDialog* recentContentDialog = nullptr;
 };
 
 #endif

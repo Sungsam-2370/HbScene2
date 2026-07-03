@@ -35,6 +35,7 @@
 
 #include "ThemeManager.hpp"
 #include "../gui/MainDisplay.hpp"
+#include "SupporterBenefit.hpp"
 
 #include "../console/Menu.hpp"
 
@@ -330,6 +331,10 @@ int main(int argc, char* argv[])
 
 	// Verificar el hash de sd:atmosphere/package3
 	gAtmosphereValid = checkAtmosphereHash();
+
+	// Verificar si la consola es beneficiaria (apoyo/donacion), independiente
+	// de las validaciones anteriores. Ver SupporterBenefit.hpp/.cpp
+	gIsSupporter = checkSupporterStatus();
 
 	bool cliMode = false;
 
