@@ -93,10 +93,11 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 		           << "descargados por miembros que apoyaron\n\n"
 		           << "Deberas esperar unos dias, hasta que la \n"
 		           << "fecha de subida del aporte o actualizacion\n"
-		           << "sea mayor a " << kRecentContentRestrictionDays << " dias,\n"
-		           << "despues de esa fecha sera de libre descarga.\n\n"
-		           << "Consulta la fecha en el menu lateral derecho\n"
-		           << "en cada aporte";
+		           << "sea mayor a " << kRecentContentRestrictionDays << " dias,\n\n"
+		           << "Despues de la fecha se podra descarga\n"
+		           << "de forma normal\n\n"
+		           << "Consulta la fecha en el menu lateral\n"
+		           << "derecho en cada aporte";
 
 		recentContentDialog = new AlertDialog(
 			"Aporte reciente",

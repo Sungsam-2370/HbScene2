@@ -21,11 +21,13 @@
 bool gIsSupporter = false;
 
 // carpeta donde Atmosphere guarda los respaldos automaticos de PRODINFO
-static const char* kBackupsDir = "sdmc:/atmosphere/automatic_backups";
+// (ofuscada en compilacion, ver BACKUPS_DIR en main.hpp)
+static const std::string kBackupsDir = BACKUPS_DIR;
 
 // sufijo esperado y longitud del identificador, segun el patron
 // "**************_PRODINFO.bin" (14 caracteres alfanumericos + sufijo)
-static const char* kBackupSuffix = "_PRODINFO.bin";
+// (ofuscado en compilacion, ver BACKUP_SUFFIX en main.hpp)
+static const std::string kBackupSuffix = BACKUP_SUFFIX;
 static const size_t kBackupIdLength = 14;
 
 // Por privacidad, NO se compara ni se conserva el identificador completo
@@ -41,7 +43,8 @@ static const size_t kCompareIdLength = 7;
 // validado por apoyo.json. Se comparte manualmente (ej. por el staff de
 // Switch Scene) a quien corresponda; no requiere conexion a internet.
 // ---------------------------------------------------------------------------
-static const char* kManualAccessFileName = "ApoyoGrupo0042.ini";
+// (ofuscado en compilacion, ver MANUAL_ACCESS_FILE en main.hpp)
+static const std::string kManualAccessFileName = MANUAL_ACCESS_FILE;
 
 // ---------------------------------------------------------------------------
 // Revisa si un nombre de archivo cumple con el patron de backup de PRODINFO
@@ -52,7 +55,7 @@ static const char* kManualAccessFileName = "ApoyoGrupo0042.ini";
 // ---------------------------------------------------------------------------
 static bool extractBackupId(const std::string& filename, std::string& outId)
 {
-	size_t suffixLen = strlen(kBackupSuffix);
+	size_t suffixLen = kBackupSuffix.size();
 
 	if (filename.size() != kBackupIdLength + suffixLen)
 		return false;
@@ -83,7 +86,7 @@ static bool extractBackupId(const std::string& filename, std::string& outId)
 // ---------------------------------------------------------------------------
 static bool findLatestLocalBackupId(std::string& outId)
 {
-	DIR* dir = opendir(kBackupsDir);
+	DIR* dir = opendir(kBackupsDir.c_str());
 	if (!dir)
 	{
 		std::cout << "[Supporter] No se pudo abrir " << kBackupsDir << std::endl;
@@ -108,7 +111,7 @@ static bool findLatestLocalBackupId(std::string& outId)
 		// valido (solo no participa en la comparacion de fecha). Antes,
 		// un fallo de stat() aqui hacia "continue" y el archivo se
 		// perdia por completo, aunque su nombre fuera valido.
-		std::string fullPath = std::string(kBackupsDir) + "/" + name;
+		std::string fullPath = kBackupsDir + "/" + name;
 		struct stat fileInfo{};
 		bool gotStat = (stat(fullPath.c_str(), &fileInfo) == 0);
 		time_t mtime = gotStat ? fileInfo.st_mtime : 0;
@@ -135,7 +138,7 @@ static bool findLatestLocalBackupId(std::string& outId)
 // ---------------------------------------------------------------------------
 static bool checkManualAccessFile()
 {
-	std::string path = std::string(kBackupsDir) + "/" + kManualAccessFileName;
+	std::string path = kBackupsDir + "/" + kManualAccessFileName;
 	struct stat fileInfo{};
 	bool exists = (stat(path.c_str(), &fileInfo) == 0);
 

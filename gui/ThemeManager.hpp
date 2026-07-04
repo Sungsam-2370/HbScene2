@@ -32,8 +32,12 @@ namespace HBAS::ThemeManager
         "Personalizado"
     };
 
+    // Tema que se usa por defecto cuando no hay preferencia guardada
+    // (Switch Scene queda disponible como opcion normal para el usuario)
+    inline const int DEFAULT_THEME = THEME_ESHOP2_DARK;
+
     // El tema actualmente activo
-    inline int currentTheme = THEME_SWITCH_SCENE;
+    inline int currentTheme = DEFAULT_THEME;
 
     // ------------------------------------------------------------------
     // Colores activos (los que usa toda la aplicacion al renderizar)

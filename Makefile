@@ -23,3 +23,37 @@ endif
  
 include libs/get/Makefile
 include libs/chesto/Makefile
+
+# ------------------------------------------------------------------
+# Quita la tabla de simbolos de depuracion del .elf intermedio, DESPUES
+# de que "make switch" termino normalmente. No modifica ninguna receta
+# existente (switch/.nro/.nso/.pfs0 se generan exactamente igual que
+# antes), asi que no puede romper el build actual — esto es un paso
+# aparte, aditivo.
+#
+# Por que: el formato .nro/.nso en si no tiene lugar para una tabla de
+# simbolos como la de un ELF de escritorio, asi que lo mas probable es
+# que el .nro que se distribuye ya no la lleve. Pero el .elf intermedio
+# (ej. scene_eshop_switch.elf) SI la tiene por defecto, y a veces ese
+# archivo queda en el repo/artifacts de CI sin querer. Este paso lo deja
+# limpio por si eso pasa, sin costo ni riesgo.
+#
+# Uso en el workflow de GitHub Actions: cambiar el paso de build de
+# "make switch" a "make switch-safe" (o dejar "make switch" y agregar
+# "make strip-switch-elf" despues).
+# ------------------------------------------------------------------
+STRIP_TOOL := $(DEVKITA64)/bin/aarch64-none-elf-strip
+
+.PHONY: switch-safe
+switch-safe:
+	@$(MAKE) switch
+	@$(MAKE) strip-switch-elf
+
+.PHONY: strip-switch-elf
+strip-switch-elf:
+	@if [ -f "$(BINARY)_switch.elf" ] && [ -x "$(STRIP_TOOL)" ]; then \
+		echo "Quitando simbolos de depuracion de $(BINARY)_switch.elf..."; \
+		"$(STRIP_TOOL)" --strip-all "$(BINARY)_switch.elf"; \
+	else \
+		echo "strip-switch-elf: no se encontro el .elf o la herramienta strip, se omite (no afecta el build)."; \
+	fi

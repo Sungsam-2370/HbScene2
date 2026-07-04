@@ -100,15 +100,15 @@ namespace HBAS::ThemeManager
             };
 
         default:
-            // THEME_CUSTOM u otro valor invalido: devolver el switch scene como respaldo
-            return getPresetColors(THEME_SWITCH_SCENE);
+            // THEME_CUSTOM u otro valor invalido: devolver el tema por defecto como respaldo
+            return getPresetColors(DEFAULT_THEME);
         }
     }
 
     void applyTheme(int themeId)
     {
         if (themeId < 0 || themeId >= THEME_TOTAL)
-            themeId = THEME_SWITCH_SCENE;
+            themeId = DEFAULT_THEME;
 
         currentTheme = themeId;
 
@@ -183,17 +183,17 @@ namespace HBAS::ThemeManager
         if (!file.is_open())
         {
             // no hay preferencia guardada, usar el tema por defecto
-            applyTheme(THEME_SWITCH_SCENE);
+            applyTheme(DEFAULT_THEME);
             return;
         }
 
         std::string line;
-        int themeId = THEME_SWITCH_SCENE;
+        int themeId = DEFAULT_THEME;
 
         if (std::getline(file, line))
         {
             try { themeId = std::stoi(line); }
-            catch (...) { themeId = THEME_SWITCH_SCENE; }
+            catch (...) { themeId = DEFAULT_THEME; }
         }
 
         if (themeId == THEME_CUSTOM)
@@ -266,8 +266,9 @@ namespace HBAS::ThemeManager
         }
 
         // Cargar el tema guardado por el usuario (si existe). Si no hay nada
-        // guardado, loadThemePreference aplica THEME_SWITCH_SCENE por defecto,
-        // que mantiene el comportamiento original de la aplicacion.
+        // guardado, loadThemePreference aplica DEFAULT_THEME (Eshop 2 Oscuro).
+        // "Switch Scene" queda disponible como una opcion mas a eleccion del
+        // usuario en la pantalla de temas.
         loadThemePreference();
     }
 }
