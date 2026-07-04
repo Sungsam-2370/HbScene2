@@ -149,19 +149,65 @@ int my_mkdir(const std::string& path, int perms)
 }
 
 // platform independent strptime
-// https://stackoverflow.com/a/33542189
+//
+// NOTE: this used to be implemented with std::get_time() over an
+// istringstream imbued with the current locale. That relies on the C++
+// standard library's locale/time-parsing facilities, which are unreliable
+// (often silently fail, always returning input.fail() == true) on the
+// devkitA64/newlib toolchain used to build the Switch binary. When that
+// happens EVERY package ends up with updated_timestamp == 0 (the default),
+// which in turn makes any "sort by most recently updated" feature (like the
+// "Novedades" category) silently degrade into alphabetical-by-name order,
+// since all timestamps compare equal and sorting falls through to the
+// tiebreaker. To avoid depending on locale support at all, only the two
+// formats actually used in this codebase are hand-parsed with sscanf below.
 char* my_strptime(const char* s,
 	const char* f,
 	struct tm* tm)
 {
-	std::istringstream input(s);
-	input.imbue(std::locale(setlocale(LC_ALL, nullptr)));
-	input >> std::get_time(tm, f);
-	if (input.fail())
+	*tm = {};
+
+	int a = 0, b = 0, c = 0, hh = 0, mm = 0, ss = 0;
+
+	if (strcmp(f, "%d/%m/%Y") == 0)
 	{
+		// day/month/year, e.g. "20/05/2026"
+		if (sscanf(s, "%d/%d/%d", &a, &b, &c) != 3)
+			return nullptr;
+
+		tm->tm_mday = a;
+		tm->tm_mon = b - 1;
+		tm->tm_year = c - 1900;
+	}
+	else if (strcmp(f, "%Y-%m-%dT%H:%M:%SZ") == 0)
+	{
+		// ISO-8601, e.g. "2026-05-20T00:00:00Z"
+		if (sscanf(s, "%d-%d-%dT%d:%d:%dZ", &c, &b, &a, &hh, &mm, &ss) != 6)
+			return nullptr;
+
+		tm->tm_mday = a;
+		tm->tm_mon = b - 1;
+		tm->tm_year = c - 1900;
+		tm->tm_hour = hh;
+		tm->tm_min = mm;
+		tm->tm_sec = ss;
+	}
+	else
+	{
+		// unsupported format string; add a manual sscanf-based branch above
+		// rather than falling back to locale-dependent parsing
+		printf("--> my_strptime: unsupported format \"%s\"\n", f);
 		return nullptr;
 	}
-	return (char*)(s + input.tellg());
+
+	// basic sanity check on the parsed date, so obviously malformed input
+	// (e.g. a field that wasn't actually a date) doesn't get treated as valid
+	if (tm->tm_mon < 0 || tm->tm_mon > 11 || tm->tm_mday < 1 || tm->tm_mday > 31 || tm->tm_year < 0)
+		return nullptr;
+
+	tm->tm_isdst = -1;
+
+	return (char*)(s + strlen(s));
 }
 
 // http://stackoverflow.com/a/11366985
