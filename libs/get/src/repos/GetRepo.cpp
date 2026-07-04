@@ -6,13 +6,21 @@
 #include <regex>
 #include <sstream>
 #include <iomanip>
+#include <ctime>
 
 using namespace rapidjson;
 
 std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 {
 	std::vector<std::unique_ptr<Package>> result;
-	std::string directoryUrl = this->url + "/repo.json";
+
+	// raw.githubusercontent.com (y CDNs similares) esta detras de una capa
+	// de cache (ej. Fastly) que puede servir una version vieja de repo.json
+	// durante varios minutos despues de que se publico una actualizacion.
+	// Se agrega un parametro con la hora actual para que cada consulta sea
+	// una URL distinta y el CDN no devuelva algo cacheado (mismo patron ya
+	// usado para apoyo.json en SupporterBenefit.cpp).
+	std::string directoryUrl = this->url + "/repo.json?nocache=" + std::to_string((long long)time(nullptr));
 
 	// fetch current repository json
 	std::string response;
@@ -29,7 +37,7 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 
 		// update repo url
 		this->url.replace(0, 5, "http");
-		directoryUrl = this->url + "/repo.json";
+		directoryUrl = this->url + "/repo.json?nocache=" + std::to_string((long long)time(nullptr));
 
 		// retry fetch
 		success = downloadFileToMemory(directoryUrl, &response);

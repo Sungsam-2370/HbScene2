@@ -7,13 +7,17 @@
 #include <iomanip>
 #include <regex>
 #include <sstream>
+#include <ctime>
 
 using namespace rapidjson;
 
 std::vector<std::unique_ptr<Package>> OSCRepo::loadPackages()
 {
 	std::vector<std::unique_ptr<Package>> result;
-	std::string directoryUrl = this->url + "/api/v3/contents";
+
+	// mismo motivo que en GetRepo.cpp / SupporterBenefit.cpp: evitar que un
+	// CDN cachee la respuesta y sirva datos viejos.
+	std::string directoryUrl = this->url + "/api/v3/contents?nocache=" + std::to_string((long long)time(nullptr));
 
 	std::string response;
 	bool success = downloadFileToMemory(directoryUrl, &response);
@@ -26,7 +30,7 @@ std::vector<std::unique_ptr<Package>> OSCRepo::loadPackages()
 
 		// update repo url
 		this->url.replace(0, 5, "http");
-		directoryUrl = this->url + "/api/v3/contents";
+		directoryUrl = this->url + "/api/v3/contents?nocache=" + std::to_string((long long)time(nullptr));
 
 		// retry fetch
 		success = downloadFileToMemory(directoryUrl, &response);

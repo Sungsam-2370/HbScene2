@@ -8,13 +8,17 @@
 #include <regex>
 #include <sstream>
 #include <map>
+#include <ctime>
 
 using namespace rapidjson;
 
 std::vector<std::unique_ptr<Package>> UniStoreRepo::loadPackages()
 {
 	std::vector<std::unique_ptr<Package>> result;
-	std::string directoryUrl = this->url + "/data/full.json";
+
+	// mismo motivo que en GetRepo.cpp / SupporterBenefit.cpp: evitar que un
+	// CDN cachee la respuesta y sirva datos viejos.
+	std::string directoryUrl = this->url + "/data/full.json?nocache=" + std::to_string((long long)time(nullptr));
 
 	std::string response;
 	bool success = downloadFileToMemory(directoryUrl, &response);
@@ -27,7 +31,7 @@ std::vector<std::unique_ptr<Package>> UniStoreRepo::loadPackages()
 
 		// update repo url
 		this->url.replace(0, 5, "http");
-		directoryUrl = this->url;
+		directoryUrl = this->url + "/data/full.json?nocache=" + std::to_string((long long)time(nullptr));
 
 		// retry fetch
 		success = downloadFileToMemory(directoryUrl, &response);
