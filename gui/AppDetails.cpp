@@ -73,7 +73,7 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	{
 		noValidationDialog = new AlertDialog(
 			"Acceso restringido",
-			"Para poder descargar debe usar\nel paquete de archivos de\nliberacion de Switch Scene."
+			"Para poder descargar en esta seccion\ndebes de usar el paquete de archivos\ndel grupo Switch Scene (PkUnico)\n\nConsulta en el grupo para mas informacion\n\nLas otras secciones son libres para \ndescargar"
 		);
 		noValidationDialog->onConfirm = [this]() {
 			noValidationDialog->hidden = true;
@@ -88,12 +88,15 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	else if (blockedByRecency && this->package->getStatus() != INSTALLED)
 	{
 		std::stringstream recentMsg;
-		recentMsg << "Este aporte es reciente, los aportes\n"
-		           << "recientes solo pueden ser descargados\n"
-		           << "por miembros que apoyaron, espera unos\n"
-		           << "dias, hasta que el aporte tenga una fecha\n"
-		           << "de actualizacion mayor a " << kRecentContentRestrictionDays << " dias,\n"
-		           << "despues de esa fecha sera de libre descarga.";
+		recentMsg << "Este es un aporte reciente\n\n"
+		           << "Los aportes recientes solo pueden ser\n"
+		           << "descargados por miembros que apoyaron\n\n"
+		           << "Deberas esperar unos dias, hasta que la \n"
+		           << "fecha de subida del aporte o actualizacion\n"
+		           << "sea mayor a " << kRecentContentRestrictionDays << " dias,\n"
+		           << "despues de esa fecha sera de libre descarga.\n\n"
+		           << "Consulta la fecha en el menu lateral derecho\n"
+		           << "en cada aporte";
 
 		recentContentDialog = new AlertDialog(
 			"Aporte reciente",

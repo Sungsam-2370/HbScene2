@@ -77,7 +77,7 @@ struct ObfStr2 {
     }
 };
 
-inline constexpr auto _OBF_APOYO_KEY = ObfStr2("CambiaEstaClaveHbScene2026");
+inline constexpr auto _OBF_APOYO_KEY = ObfStr2("PoCj2H4mvpSUaDMYL8k15Impv");
 
 // Macros de acceso — el resto del codigo las usa igual que antes.
 // decode() se llama una sola vez por uso, el resultado es un std::string normal.
