@@ -39,7 +39,8 @@ jobs:
     - name: Build ${{ matrix.platform }}
       run: |
         if [ "${{ matrix.platform }}" = "switch" ]; then
-          make switch-safe
+          make switch
+          make strip-switch-elf
         else
           make ${{ matrix.platform }}
         fi

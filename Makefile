@@ -44,11 +44,6 @@ include libs/chesto/Makefile
 # ------------------------------------------------------------------
 STRIP_TOOL := $(DEVKITA64)/bin/aarch64-none-elf-strip
 
-.PHONY: switch-safe
-switch-safe:
-	@$(MAKE) switch
-	@$(MAKE) strip-switch-elf
-
 .PHONY: strip-switch-elf
 strip-switch-elf:
 	@if [ -f "$(BINARY)_switch.elf" ] && [ -x "$(STRIP_TOOL)" ]; then \
