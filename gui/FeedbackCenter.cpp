@@ -66,7 +66,7 @@ void FeedbackMessage::build()
     std::string url = REPO_URL;
     url += "/packages/";
     url += package;
-    url += "/icon.png";
+    url += "/icon.jpg";
 
     NetImageElement* img = new NetImageElement(url.c_str(), []{
         return new ImageElement(RAMFS "res/default.png");

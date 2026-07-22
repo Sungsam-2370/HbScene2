@@ -146,6 +146,25 @@ bool CST_SavePNG(CST_Texture* texture, const char* file_name)
 	return true;
 }
 
+// same as CST_SavePNG, but actually encodes real JPG bytes (not just a
+// renamed PNG) -- used for package icons/screenshots cached locally,
+// where we want the real file-size savings on the SD card
+bool CST_SaveJPG(CST_Texture* texture, const char* file_name, int quality)
+{
+	auto renderer = RootDisplay::mainDisplay->renderer;
+    SDL_Texture* target = SDL_GetRenderTarget(renderer);
+    SDL_SetRenderTarget(renderer, texture);
+    int width, height;
+    SDL_QueryTexture(texture, NULL, NULL, &width, &height);
+    // JPG has no alpha channel, so we render into an RGB (no-alpha) surface
+    SDL_Surface* surface = SDL_CreateRGBSurface(0, width, height, 24, 0, 0, 0, 0);
+    SDL_RenderReadPixels(renderer, NULL, surface->format->format, surface->pixels, surface->pitch);
+    IMG_SaveJPG(surface, file_name, quality);
+    SDL_FreeSurface(surface);
+    SDL_SetRenderTarget(renderer, target);
+	return true;
+}
+
 void CST_FadeInMusic(RootDisplay* root)
 {
 #if !defined(SIMPLE_SDL2)

@@ -85,6 +85,7 @@ bool CST_isRectOffscreen(CST_Rect* rect);
 
 void CST_GetRGBA(Uint32 pixel, SDL_PixelFormat* format, CST_Color* cstColor);
 bool CST_SavePNG(CST_Texture* texture, const char* filename);
+bool CST_SaveJPG(CST_Texture* texture, const char* filename, int quality = 85);
 void CST_SetWindowTitle(const char* title);
 
 void CST_SetCursor(int cursor);

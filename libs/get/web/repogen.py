@@ -3,12 +3,12 @@ import os, json, zipfile, time, datetime, hashlib, re
 
 print("Content-type: text/html\n\n")
 
-SCREEN_REGEX = re.compile("^screen[1-9].png$")
+SCREEN_REGEX = re.compile("^screen[1-9].jpg$")
 
 def zipdir(path, ziph):
     for root, dirs, files in os.walk(path):
         for file in files:
-            if root == "." and (file == "icon.png" or file == "screen.png" or file == ".deletetoupdate"):
+            if root == "." and (file == "icon.jpg" or file == "screen.jpg" or file == ".deletetoupdate"):
                 continue
             ziph.write(os.path.join(root, file))
 
@@ -55,7 +55,7 @@ for package in os.listdir("packages"):
         manifest = ""
         for root, dirs, files in os.walk("."):
             for file in files:
-                if root == "." and (file == "manifest.install" or file == "icon.png" or file == "info.json" or file == "screen.png" or file == ".deletetoupdate" or SCREEN_REGEX.match(file)):
+                if root == "." and (file == "manifest.install" or file == "icon.jpg" or file == "info.json" or file == "screen.jpg" or file == ".deletetoupdate" or SCREEN_REGEX.match(file)):
                     continue
                 relPath = os.path.join(root, file)[2:]
                 relPath.replace("\\", "/")

@@ -809,7 +809,8 @@ bool Package::remove(std::string_view pkg_path)
 	std::remove(ManifestPath.c_str());
 	auto full_pkg_path = std::string(pkg_path) + this->pkg_name;
 	std::remove((full_pkg_path + "/info.json").c_str());
-	std::remove((full_pkg_path + "/icon.png").c_str()); // clean up icon if present
+	std::remove((full_pkg_path + "/icon.jpg").c_str()); // clean up icon if present
+	std::remove((full_pkg_path + "/icon.png").c_str()); // clean up legacy png icon, if present from before the jpg migration
 
 	rmdir((std::string(pkg_path) + this->pkg_name).c_str());
 
@@ -981,7 +982,7 @@ std::string Package::getIconUrl() const
 
 std::string Package::getBannerUrl() const
 {
-	return this->mRepo->getUrl() + "/packages/" + this->pkg_name + "/screen.png";
+	return this->mRepo->getUrl() + "/packages/" + this->pkg_name + "/screen.jpg";
 }
 
 std::string Package::getScreenShotUrl(int count) const
@@ -989,7 +990,7 @@ std::string Package::getScreenShotUrl(int count) const
 	if (!this->mRepo) {
 		return "";
 	}
-	return this->mRepo->getUrl() + "/packages/" + this->pkg_name + "/screen" + std::to_string(count) + ".png";
+	return this->mRepo->getUrl() + "/packages/" + this->pkg_name + "/screen" + std::to_string(count) + ".jpg";
 }
 
 std::string Package::getManifestUrl() const

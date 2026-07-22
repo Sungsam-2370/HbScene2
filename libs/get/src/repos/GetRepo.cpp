@@ -192,5 +192,5 @@ std::string GetRepo::getZipUrl(const Package& package) const
 std::string GetRepo::getIconUrl(const Package& package) const
 {
 	// Get icons are also just in the /packages folder
-	return this->url + "/packages/" + package.getPackageName() + "/icon.png";
+	return this->url + "/packages/" + package.getPackageName() + "/icon.jpg";
 }

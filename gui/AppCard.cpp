@@ -14,13 +14,21 @@ AppCard::AppCard(Package& package, AppList* list)
 	, list(list)
 	, icon(package.getIconUrl().c_str(), [list, package] {
 		// if the icon fails to load, and we're offline, try to use one from the cache
-		auto iconSavePath = std::string(list->get->mPkg_path) + "/" + package.getPackageName() + "/icon.png";
+		auto iconSavePath = std::string(list->get->mPkg_path) + "/" + package.getPackageName() + "/icon.jpg";
+		// packages installed before the png->jpg migration may still only have this
+		auto legacyIconSavePath = std::string(list->get->mPkg_path) + "/" + package.getPackageName() + "/icon.png";
 
 		// check if the package is installed, and if the icon file exists using stat
 		struct stat buffer;
 		if (package.getStatus() != GET && stat(iconSavePath.c_str(), &buffer) == 0) {
 			// file exists, return the path to the icon
 			auto img = new ImageElement(iconSavePath.c_str());
+			img->setScaleMode(SCALE_PROPORTIONAL_WITH_BG);
+			return img;
+		}
+		else if (package.getStatus() != GET && stat(legacyIconSavePath.c_str(), &buffer) == 0) {
+			// fall back to a legacy cached png icon, if that's all that's there
+			auto img = new ImageElement(legacyIconSavePath.c_str());
 			img->setScaleMode(SCALE_PROPORTIONAL_WITH_BG);
 			return img;
 		}

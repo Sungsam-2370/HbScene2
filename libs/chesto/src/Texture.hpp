@@ -62,6 +62,10 @@ public:
 	/// save this texture to the given file path as a PNG
 	bool saveTo(std::string& path);
 
+	/// save this texture to the given file path as a JPG (no alpha channel,
+	/// smaller on disk -- use for photo-like content like package icons/screenshots)
+	bool saveToJpg(std::string& path, int quality = 85);
+
 	/// update and load or reload the texture
 	void loadPath(std::string& path, bool forceReload = false);
 

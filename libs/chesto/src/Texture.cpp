@@ -255,6 +255,29 @@ bool Texture::saveTo(std::string &path)
 	return CST_SavePNG(target, path.c_str());
 }
 
+bool Texture::saveToJpg(std::string &path, int quality)
+{
+	if (!mTexture)
+		return false;
+
+	// render the texture to one that can be saved (TARGET ACCESS)
+	CST_Texture* target = SDL_CreateTexture(getRenderer(), SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, texW, texH);
+	if (!target)
+		return false;
+
+	// set the target texture
+	SDL_SetRenderTarget(getRenderer(), target);
+
+	// render the texture
+	SDL_RenderCopy(getRenderer(), mTexture, NULL, NULL);
+
+	// reset the target texture
+	SDL_SetRenderTarget(getRenderer(), NULL);
+
+	// save the surface to the path, as a real JPG
+	return CST_SaveJPG(target, path.c_str(), quality);
+}
+
 void Texture::loadPath(std::string& path, bool forceReload) {
 	if (forceReload || !loadFromCache(path))
 	{

@@ -432,30 +432,6 @@ void AppList::update()
 			return left.getPackageName() < right.getPackageName();
 		});
 
-		// ------------------------------------------------------------------
-		// TEMPORARY DEBUG: dump name / raw "updated" string / parsed
-		// timestamp for every non-theme package to a file on the SD card,
-		// so we can confirm from a real device run whether getUpdatedAtTimestamp()
-		// is actually differing between packages or coming back as 0/equal
-		// for everyone. Safe to remove once we've confirmed the real cause.
-		// ------------------------------------------------------------------
-		{
-			std::ofstream debugLog(std::string(ROOT_PATH) + "hbscene_debug_novedades.txt");
-			if (debugLog.is_open())
-			{
-				debugLog << "sorted novedades candidates (before trimming to " << NOVEDADES_COUNT << "):\n";
-				for (auto& pkg : novedadesPackages)
-				{
-					debugLog << pkg.getPackageName()
-					          << " | updated=\"" << pkg.getUpdatedAt() << "\""
-					          << " | updated_timestamp=" << pkg.getUpdatedAtTimestamp()
-					          << " | status=" << pkg.getStatus()
-					          << "\n";
-				}
-				debugLog.close();
-			}
-		}
-
 		if (novedadesPackages.size() > NOVEDADES_COUNT)
 			novedadesPackages.erase(novedadesPackages.begin() + NOVEDADES_COUNT, novedadesPackages.end());
 	}

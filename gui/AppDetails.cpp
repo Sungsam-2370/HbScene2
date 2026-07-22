@@ -248,8 +248,8 @@ void AppDetails::proceed()
 		get->install(*package);
 		// save the icon to the SD card, for offline use
 		if (appCard != NULL) {
-			auto iconSavePath = std::string(get->mPkg_path) + "/" + package->getPackageName() + "/icon.png";
-			appCard->icon.saveTo(iconSavePath);
+			auto iconSavePath = std::string(get->mPkg_path) + "/" + package->getPackageName() + "/icon.jpg";
+			appCard->icon.saveToJpg(iconSavePath);
 			//TODO: load from a cache instead!!
 		}
 	}
