@@ -1,5 +1,7 @@
 #if defined(SWITCH)
 #include <switch.h>
+#include "../libs/get/src/nspinstall/es_ipc.h"
+#include "../libs/get/src/nspinstall/ns_ext_ipc.h"
 #endif
 
 #if defined(WII)
