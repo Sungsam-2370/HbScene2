@@ -294,6 +294,11 @@ void AppDetails::proceed()
 		resultMsg = "DESCARGA EXITOSA";
 		if (!this->package->getInstallMessage().empty())
 			resultMsg += "\n\n" + this->package->getInstallMessage();
+
+		// si el repo.json traia la orden "instalacion", mostramos el
+		// resultado de esa auto-instalacion tambien (exito o fallo)
+		if (!this->package->runtime_install_status.empty())
+			resultMsg += "\n\n" + this->package->runtime_install_status;
 	}
 
 	resultDialog = new AlertDialog(resultTitle, resultMsg);

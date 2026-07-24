@@ -16,6 +16,7 @@
 
 #ifdef SWITCH
 #include <switch.h>
+#include "nspinstall/NspAutoInstall.hpp"
 #endif
 
 using namespace rapidjson;
@@ -129,6 +130,25 @@ int Get::install(Package& package, bool resume)
 	}
 
 	printf("--> Downloaded [%s] to sdroot/\n", package.getPackageName().c_str());
+
+	package.runtime_install_status.clear();
+
+#ifdef SWITCH
+	// Paso 3 del flujo pedido: si (y solo si) el repo.json trae la clave
+	// "instalacion", ya se descargaron y extrajeron todos los zips del
+	// paquete (incluyendo multi-zip), asi que el .nsp referenciado ya
+	// deberia existir en el SD. Intentamos instalarlo ahora.
+	if (!package.getInstallNsp().empty())
+	{
+		auto nspResult = nspinstall::InstallNspIfRequested(ROOT_PATH, package.getInstallNsp(), false);
+		if (!nspResult.nothing_to_do)
+		{
+			printf("--> Auto-instalacion de NSP [%s]: %s\n",
+			       package.getInstallNsp().c_str(), nspResult.success ? "OK" : "FALLO");
+			package.runtime_install_status = nspResult.message;
+		}
+	}
+#endif
 
 	// clear any progress callbacks before updating repo metadata
 	extern libget_progress_callback_t networking_callback;

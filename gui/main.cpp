@@ -318,6 +318,17 @@ int main(int argc, char* argv[])
 #endif
 #if defined(SWITCH)
     chdir("sdmc:/switch/scene_eshop");
+
+	// Servicios necesarios para la auto-instalacion de NSPs indicada por
+	// repo.json ("instalacion"). Si alguno falla igual seguimos: simplemente
+	// InstallNspIfRequested() fallara mas adelante y se mostrara el error
+	// en el popup, sin tumbar el resto de la app.
+	splInitialize();
+	splCryptoInitialize();
+	ncmInitialize();
+	esInitialize();
+	nsInitialize();
+	nsextInitialize();
 #endif
 
 	// Inicializar el RomFS (resin:/) ANTES de cualquier cosa que necesite
@@ -391,6 +402,15 @@ int main(int argc, char* argv[])
 	}
 
 	deinit_networking();
+
+#if defined(SWITCH)
+	nsextExit();
+	nsExit();
+	esExit();
+	ncmExit();
+	splCryptoExit();
+	splExit();
+#endif
 
 	return 0;
 }
