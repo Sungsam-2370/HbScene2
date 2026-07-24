@@ -7,6 +7,7 @@
 // responsible for directly interacting with SDL!
 #include "DrawUtils.hpp"
 #include "RootDisplay.hpp"
+#include "TextElement.hpp"
 
 char* musicData = NULL;
 
@@ -66,6 +67,7 @@ bool CST_DrawInit(RootDisplay* root)
 void CST_DrawExit()
 {
 	//IMG_Quit();
+	TextElement::closeAllFonts();
 	TTF_Quit();
 
 	SDL_Delay(10);

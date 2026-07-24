@@ -60,6 +60,16 @@ public:
 
 	static std::map<std::string, int> forcedLangFonts;
 
+	/// cache of already-open TTF_Font handles, keyed by "path_size", so we
+	/// don't reopen/reparse the same font file for every single piece of
+	/// text (this was previously the #1 cost of building a screen full of
+	/// AppCards -- every title/version/status text opened its font fresh)
+	static std::map<std::string, TTF_Font*> fontCache;
+
+	/// closes every cached font handle -- call once at app shutdown,
+	/// right before TTF_Quit()
+	static void closeAllFonts();
+
 private:
 	// default values
 	int textSize = 16;

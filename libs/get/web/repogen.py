@@ -132,6 +132,14 @@ for package in os.listdir("packages"):
             else:
                 target[val] = "n/a"
 
+        # "mensaje": instruccion final que se muestra al terminar una
+        # descarga exitosa. A diferencia de los campos de arriba, NO se
+        # rellena con "n/a" si falta -- si el paquete no define "mensaje",
+        # el campo simplemente no se incluye, y la app solo muestra
+        # "DESCARGA EXITOSA" sin nada mas.
+        if "mensaje" in props and props["mensaje"]:
+            target["mensaje"] = props["mensaje"]
+
     if needsCaching:    # no deletetoupdate loaded, we need to make one
         del_to_update = open(".deletetoupdate", 'w')
         json.dump(cached_info, del_to_update, sort_keys=True, indent=4, separators=(',', ': '))
