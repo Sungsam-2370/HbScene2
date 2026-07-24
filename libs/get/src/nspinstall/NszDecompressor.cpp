@@ -11,9 +11,13 @@
 
 #include <switch.h>
 
-#if __has_include(<zstd.h>)
+// zstd viene vendorizado dentro del proyecto (libs/get/src/nspinstall/zstd/),
+// compilado como fuente propia -- NO depende de ningun portlib de devkitPro
+// (no existe "switch-zstd" oficial). Si alguien llegase a borrar esa carpeta,
+// esto sigue compilando sin soporte de .ncz en vez de romper el build.
+#if __has_include("zstd/zstd.h")
 #define PINX_HAS_ZSTD 1
-#include <zstd.h>
+#include "zstd/zstd.h"
 #else
 #define PINX_HAS_ZSTD 0
 #endif

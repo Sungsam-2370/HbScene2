@@ -23,17 +23,22 @@ endif
 
 # Auto-instalacion de NSP (repo.json: "instalacion") -- solo aplica a Switch,
 # ya que depende de NCM/ES (instalacion de titulos) y de libnx. mbedtls hace
-# falta para derivar la header key de las NCA (CryptoUtils.cpp); zstd hace
-# falta para descomprimir NCAs en formato .ncz (NszDecompressor.cpp) dentro
-# de un nsp/nsz.
+# falta para derivar la header key de las NCA (CryptoUtils.cpp).
+#
+# NOTA sobre zstd/.ncz: NO hay paquete oficial "switch-zstd" en el repo de
+# pacman de devkitPro (solo un PR viejo sin mergear), asi que en vez de
+# depender de un portlib vendorizamos un subset de zstd (solo la ruta de
+# DEScompresion, sin threading/pool) directo en libs/get/src/nspinstall/zstd
+# y lo compilamos como codigo fuente propio del proyecto -- cero dependencia
+# externa nueva, cero pasos de CI adicionales.
 #
 # OJO: a diferencia de SOURCES/CFLAGS (que chesto ya exporta), LIBS no viaja
 # solo hacia el sub-make que hace el link final, asi que hay que exportarla
 # a mano o el linker nunca la va a ver.
 ifeq (switch,$(MAKECMDGOALS))
 SOURCES   += libs/get/src/nspinstall
+SOURCES   += libs/get/src/nspinstall/zstd
 LIBS      += -lmbedtls -lmbedx509 -lmbedcrypto
-LIBS      += -lzstd
 export LIBS
 endif
  

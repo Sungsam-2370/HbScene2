@@ -25,7 +25,7 @@ jobs:
         submodules: false
     - name: Inicializar submodules
       run: |
-        git config --global --add safe.directory /__w/HbScene2/HbScene2
+        git config --global --add safe.directory /__w/HbScene/HbScene
         git submodule update --init --recursive libs/librpxloader
     - if: matrix.platform == 'wii'
       name: Setup SDL2 Widescreen
@@ -37,9 +37,9 @@ jobs:
         cmake --build build --parallel
         cmake --install build
     - if: matrix.platform == 'switch'
-      name: Instalar dependencias extra (mbedtls + zstd para auto-instalacion de NSP/NSZ)
+      name: Instalar dependencias extra (mbedtls para auto-instalacion de NSP)
       run: |
-        dkp-pacman --noconfirm -Sy switch-mbedtls switch-zstd
+        dkp-pacman --noconfirm -Sy switch-mbedtls
     - name: Build ${{ matrix.platform }}
       run: |
         if [ "${{ matrix.platform }}" = "switch" ]; then
