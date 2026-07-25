@@ -4,6 +4,8 @@
 #if defined(SWITCH)
 #include <switch.h>
 #include "../libs/get/src/nspinstall/NspAutoInstall.hpp"
+#include "../libs/get/src/nspinstall/es_ipc.h"
+#include "../libs/get/src/nspinstall/ns_ext_ipc.h"
 #endif
 
 #if defined(__WIIU__)
@@ -275,6 +277,20 @@ void AppDetails::proceed()
 			downloadProgress.percent = 0;
 			RootDisplay::mainDisplay->render(NULL);
 
+			// Los servicios de instalacion de titulos (spl/ncm/es/ns) se
+			// abren SOLO aca, justo antes de usarlos, y se cierran apenas
+			// terminamos -- NO se mantienen abiertos toda la sesion (antes
+			// se abrian una vez en main.cpp y quedaban vivos siempre, para
+			// CUALQUIER descarga, tuviera o no "instalacion"; eso competia
+			// por memoria/handles con el resto de la app durante toda la
+			// sesion, incluso cuando nunca se llegaba a instalar nada).
+			splInitialize();
+			splCryptoInitialize();
+			ncmInitialize();
+			esInitialize();
+			nsInitialize();
+			nsextInitialize();
+
 			auto nspResult = nspinstall::InstallNspIfRequested(
 				ROOT_PATH, package->getInstallNsp(), false,
 				[](std::uint64_t done, std::uint64_t total, const std::string &) {
@@ -284,6 +300,13 @@ void AppDetails::proceed()
 					if (networking_callback != nullptr && total > 0)
 						networking_callback(nullptr, (double)done / (double)total);
 				});
+
+			nsextExit();
+			nsExit();
+			esExit();
+			ncmExit();
+			splCryptoExit();
+			splExit();
 
 			package->runtime_install_status = nspResult.message;
 			printf("--> Instalacion de NSP [%s]: %s\n",

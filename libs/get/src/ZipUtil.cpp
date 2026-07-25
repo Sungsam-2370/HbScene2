@@ -15,6 +15,10 @@
 #include "Utils.hpp"
 #include "ZipUtil.hpp"
 
+#if defined(SWITCH)
+#include <switch.h>
+#endif
+
 #define u32 uint32_t
 #define u8 uint8_t
 
@@ -417,6 +421,11 @@ int UnZip::Extract(const std::string& path, const unz_file_info_s& fileInfo)
 		return -2;
 	}
 
+	// log de diagnostico: si el proceso se cuelga, esta es la ultima linea
+	// que se va a haber impreso, y nos dice exactamente que archivo (y de
+	// que tamaño) estaba escribiendo en ese momento
+	printf("[extract] %s (%u bytes)...\n", path.c_str(), (unsigned)fileInfo.uncompressed_size);
+
 	size_t last_slash_idx = path.find_last_of("/\\");
 	if (last_slash_idx != std::string::npos)
 	{
@@ -453,8 +462,27 @@ int UnZip::Extract(const std::string& path, const unz_file_info_s& fileInfo)
 			break;
 		}
 		done += writeBytes;
+
+#if defined(SWITCH)
+		// CRITICO: sin esto, un solo archivo grande dentro del zip (un
+		// core/BIOS/ROM/asset de varios MB o mas) puede tardar varios
+		// segundos (o mas, segun velocidad de la SD) en escribirse por
+		// completo SIN que la consola/la app reciban ninguna señal de
+		// vida -- este bucle no llamaba a networking_callback ni a
+		// appletReportUserIsActive() en ningun punto intermedio, solo
+		// una vez que el archivo COMPLETO terminaba (ver
+		// ExtractAllWithProgress, que reporta progreso por archivo, no
+		// por bloque). Eso es lo que se percibe como "la extraccion se
+		// congelo", independientemente de cualquier otra cosa.
+		appletReportUserIsActive();
+#endif
 	}
 
+	printf("[extract] %s listo (%u/%u bytes)\n", path.c_str(), (unsigned)done, (unsigned)fileInfo.uncompressed_size);
+
+#if defined(SWITCH)
+	appletReportUserIsActive(); // fsync() de un archivo grande tambien puede tardar
+#endif
 	fsync(fd);
 	close(fd);
 	cross_free(buffer);
