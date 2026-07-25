@@ -3,9 +3,6 @@
 
 #if defined(SWITCH)
 #include <switch.h>
-#include "../libs/get/src/nspinstall/NspAutoInstall.hpp"
-#include "../libs/get/src/nspinstall/es_ipc.h"
-#include "../libs/get/src/nspinstall/ns_ext_ipc.h"
 #endif
 
 #if defined(__WIIU__)
@@ -258,61 +255,6 @@ void AppDetails::proceed()
 			appCard->icon.saveToJpg(iconSavePath);
 			//TODO: load from a cache instead!!
 		}
-
-#if defined(SWITCH)
-		// --- Paso 3: instalacion del NSP (repo.json: "instalacion") ---
-		// Explicitamente SEPARADO de la descarga/extraccion de arriba (que
-		// termina en get->install()). Antes esto estaba encadenado dentro
-		// de Get::install(), lo que lo hacia indistinguible de la
-		// extraccion para el usuario. Ahora es su propio paso, con su
-		// propia etapa de progreso, y solo se ejecuta si la descarga y
-		// extraccion ya terminaron bien.
-		if (succeeded && !package->getInstallNsp().empty())
-		{
-			downloadStatus.setText("Instalando NSP...");
-			downloadStatus.update();
-			downloadPercent.setText("0%");
-			downloadPercent.update();
-			downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
-			downloadProgress.percent = 0;
-			RootDisplay::mainDisplay->render(NULL);
-
-			// Los servicios de instalacion de titulos (spl/ncm/es/ns) se
-			// abren SOLO aca, justo antes de usarlos, y se cierran apenas
-			// terminamos -- NO se mantienen abiertos toda la sesion (antes
-			// se abrian una vez en main.cpp y quedaban vivos siempre, para
-			// CUALQUIER descarga, tuviera o no "instalacion"; eso competia
-			// por memoria/handles con el resto de la app durante toda la
-			// sesion, incluso cuando nunca se llegaba a instalar nada).
-			splInitialize();
-			splCryptoInitialize();
-			ncmInitialize();
-			esInitialize();
-			nsInitialize();
-			nsextInitialize();
-
-			auto nspResult = nspinstall::InstallNspIfRequested(
-				ROOT_PATH, package->getInstallNsp(), false,
-				[](std::uint64_t done, std::uint64_t total, const std::string &) {
-					// reutiliza el mismo callback de progreso/heartbeat que
-					// ya usa la descarga -- todavia esta activo aca porque
-					// postInstallHook() (que lo limpia) corre despues
-					if (networking_callback != nullptr && total > 0)
-						networking_callback(nullptr, (double)done / (double)total);
-				});
-
-			nsextExit();
-			nsExit();
-			esExit();
-			ncmExit();
-			splCryptoExit();
-			splExit();
-
-			package->runtime_install_status = nspResult.message;
-			printf("--> Instalacion de NSP [%s]: %s\n",
-			       package->getInstallNsp().c_str(), nspResult.success ? "OK" : "FALLO");
-		}
-#endif
 	}
 
 	postInstallHook();
@@ -352,11 +294,6 @@ void AppDetails::proceed()
 		resultMsg = "DESCARGA EXITOSA";
 		if (!this->package->getInstallMessage().empty())
 			resultMsg += "\n\n" + this->package->getInstallMessage();
-
-		// si el repo.json traia la orden "instalacion", mostramos el
-		// resultado de esa auto-instalacion tambien (exito o fallo)
-		if (!this->package->runtime_install_status.empty())
-			resultMsg += "\n\n" + this->package->runtime_install_status;
 	}
 
 	resultDialog = new AlertDialog(resultTitle, resultMsg);

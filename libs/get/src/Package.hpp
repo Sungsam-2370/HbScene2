@@ -100,20 +100,6 @@ public:
 		return install_message;
 	}
 
-	// ruta (relativa a ROOT_PATH) del .nsp a instalar automaticamente tras
-	// la extraccion, si el repo.json trae la clave "instalacion". Vacio si
-	// el paquete no la define -> no se debe instalar nada.
-	[[nodiscard]] const std::string& getInstallNsp() const
-	{
-		return install_nsp;
-	}
-
-	// Resultado (en tiempo de ejecucion) del ultimo intento de auto-instalar
-	// el NSP indicado por "instalacion". Lo llena Get::install() despues de
-	// la extraccion; vacio si no habia orden de instalacion para este paquete.
-	// No viene de repo.json, por eso vive fuera del bloque "private + friend".
-	std::string runtime_install_status;
-
 	[[nodiscard]] const std::string& getLongDescription() const
 	{
 		return long_desc;
@@ -201,9 +187,6 @@ private:
 	std::string zipUrl2;  // optional second zip URL for split packages
 	std::string zipUrl3;  // optional third zip URL for split packages
 	std::string zipUrl4;  // optional fourth zip URL for split packages
-	std::string install_nsp; // "instalacion" en repo.json: ruta (relativa a ROOT_PATH)
-	                          // del .nsp a instalar automaticamente tras la extraccion.
-	                          // Vacio por defecto -> no se instala nada.
 	std::string iconUrl;
 
 	std::string updated;

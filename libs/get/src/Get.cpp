@@ -130,17 +130,6 @@ int Get::install(Package& package, bool resume)
 
 	printf("--> Downloaded [%s] to sdroot/\n", package.getPackageName().c_str());
 
-	package.runtime_install_status.clear();
-
-	// NOTA: la auto-instalacion del NSP (repo.json: "instalacion") YA NO se
-	// dispara aca. Antes vivia en este mismo Get::install(), encadenada
-	// justo despues de la extraccion, pero eso la hacia indistinguible de
-	// la extraccion para el usuario (misma pantalla, mismo "Extrayendo").
-	// Ahora es un paso explicito y separado que dispara AppDetails::proceed()
-	// DESPUES de que este Get::install() retorna, con su propia pantalla de
-	// progreso (ver AppDetails.cpp). Get.cpp solo deja el .nsp ya extraido
-	// en el SD, listo para que ese paso lo instale.
-
 	// clear any progress callbacks before updating repo metadata
 	extern libget_progress_callback_t networking_callback;
 	extern void* networking_callback_data;
