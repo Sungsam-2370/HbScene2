@@ -160,11 +160,26 @@ bool CST_SaveJPG(CST_Texture* texture, const char* file_name, int quality)
     SDL_QueryTexture(texture, NULL, NULL, &width, &height);
     // JPG has no alpha channel, so we render into an RGB (no-alpha) surface
     SDL_Surface* surface = SDL_CreateRGBSurface(0, width, height, 24, 0, 0, 0, 0);
+    if (!surface)
+    {
+        // SDL_CreateRGBSurface puede devolver NULL (memoria insuficiente,
+        // width/height invalidos, etc.). Sin este chequeo, la linea de
+        // abajo (surface->format->format) es un deref de puntero nulo que
+        // termina saltando a una direccion de codigo invalida dentro de
+        // libjpeg -- exactamente el crash "Instruction Abort en 0x0" que
+        // encontramos via crash log + addr2line (los registros X3-X7
+        // resolvian a error_exit/emit_message/output_message de jerror.c).
+        printf("[CST_SaveJPG] SDL_CreateRGBSurface fallo (%dx%d): %s\n", width, height, SDL_GetError());
+        SDL_SetRenderTarget(renderer, target);
+        return false;
+    }
     SDL_RenderReadPixels(renderer, NULL, surface->format->format, surface->pixels, surface->pitch);
-    IMG_SaveJPG(surface, file_name, quality);
+    bool saved = (IMG_SaveJPG(surface, file_name, quality) == 0);
+    if (!saved)
+        printf("[CST_SaveJPG] IMG_SaveJPG fallo para %s: %s\n", file_name, SDL_GetError());
     SDL_FreeSurface(surface);
     SDL_SetRenderTarget(renderer, target);
-	return true;
+	return saved;
 }
 
 void CST_FadeInMusic(RootDisplay* root)
