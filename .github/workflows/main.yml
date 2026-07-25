@@ -44,10 +44,22 @@ jobs:
       run: |
         if [ "${{ matrix.platform }}" = "switch" ]; then
           make switch
-          make strip-switch-elf
         else
           make ${{ matrix.platform }}
         fi
+    - if: matrix.platform == 'switch'
+      uses: actions/upload-artifact@v4
+      with:
+        # .elf SIN stripear -- indispensable para poder correr addr2line
+        # sobre los crash logs (los offsets "scene_eshop + 0x..." no sirven
+        # de nada sin este archivo). No se puede regenerar despues: una vez
+        # que se pierde este artifact de una build especifica, ya no hay
+        # forma de resolver los crashes de ESA build en particular.
+        name: scene_eshop_switch.elf
+        path: scene_eshop_switch.elf
+    - if: matrix.platform == 'switch'
+      name: Quitar simbolos de depuracion del elf (no afecta al .nro final)
+      run: make strip-switch-elf
     - uses: actions/upload-artifact@v4
       with:
         name: scene_eshop.${{ matrix.ext }}
