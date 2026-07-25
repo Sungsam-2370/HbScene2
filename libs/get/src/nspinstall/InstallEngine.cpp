@@ -306,16 +306,20 @@ InstallResult InstallFromEntries(FILE *file,
                                   const InstallConfig &config,
                                   ProgressCallback progress) {
     InstallResult result;
+    printf("[nspinstall] iniciando (%zu entradas)\n", entries.size());
 
     HeaderKey header_key{};
     const bool have_header_key = DeriveHeaderKey(header_key);
     const HeaderKey *hk_ptr = have_header_key ? &header_key : nullptr;
+    printf("[nspinstall] header key %s\n", have_header_key ? "derivada OK" : "NO disponible");
 
     ContentStorage storage(config.dest_storage_id);
     if(!storage.IsOpen()) { result.error_message = "Failed to open content storage"; return result; }
+    printf("[nspinstall] content storage abierto\n");
 
     ContentMetaDatabase meta_db(config.dest_storage_id);
     if(!meta_db.IsOpen()) { result.error_message = "Failed to open content meta database"; return result; }
+    printf("[nspinstall] content meta database abierta\n");
 
     std::vector<NcmContentId> registered_ids;
     struct CleanupGuard {
@@ -343,13 +347,18 @@ InstallResult InstallFromEntries(FILE *file,
         if(i >= cert_entries.size()) break;
         const auto *tik_e  = tik_entries[i];
         const auto *cert_e = cert_entries[i];
+        printf("[nspinstall] importando ticket %zu/%zu (%s)\n", i + 1, tik_entries.size(), tik_e->name.c_str());
         auto tik_buf  = std::make_unique<std::uint8_t[]>(tik_e->size);
         auto cert_buf = std::make_unique<std::uint8_t[]>(cert_e->size);
         std::fseek(file, static_cast<long>(tik_e->offset), SEEK_SET);
         if(std::fread(tik_buf.get(), tik_e->size, 1, file) != 1) continue;
         std::fseek(file, static_cast<long>(cert_e->offset), SEEK_SET);
         if(std::fread(cert_buf.get(), cert_e->size, 1, file) != 1) continue;
+#if defined(SWITCH)
+        appletReportUserIsActive(); // ImportTicket es IPC bloqueante sin progreso propio
+#endif
         ImportTicket(tik_buf.get(), tik_e->size, cert_buf.get(), cert_e->size);
+        printf("[nspinstall] ticket %zu/%zu importado\n", i + 1, tik_entries.size());
     }
 
     std::vector<const GenericEntry *> cnmt_entries;
@@ -363,6 +372,7 @@ InstallResult InstallFromEntries(FILE *file,
         }
     }
     if(cnmt_entries.empty()) { result.error_message = "No CNMT NCA found in package"; return result; }
+    printf("[nspinstall] %zu CNMT encontrados\n", cnmt_entries.size());
 
     struct CnmtRecord { ContentMeta meta; NcmContentInfo cnmt_info; };
     std::vector<CnmtRecord> cnmt_records;
@@ -373,6 +383,7 @@ InstallResult InstallFromEntries(FILE *file,
         NcmContentId cnmt_nca_id = NcaIdFromString(nca_id_hex);
 
         if(!storage.Has(cnmt_nca_id) || config.reinstall_ncas) {
+            printf("[nspinstall] instalando CNMT nca %s\n", cnmt_entry->name.c_str());
             if(!InstallSingleNca(file, container_path, cnmt_entry,
                                   storage, cnmt_nca_id, progress, 0, 0, hk_ptr)) {
                 result.error_message = "Failed to install CNMT NCA: " + cnmt_entry->name;
@@ -381,6 +392,7 @@ InstallResult InstallFromEntries(FILE *file,
             registered_ids.push_back(cnmt_nca_id);
         }
 
+        printf("[nspinstall] leyendo CNMT desde nca instalado\n");
         std::vector<std::uint8_t> cnmt_data;
         if(!ReadCnmtFromInstalledNca(storage, cnmt_nca_id, cnmt_data)) {
             result.error_message = "Failed to read CNMT from installed NCA: " + cnmt_entry->name;
@@ -394,6 +406,7 @@ InstallResult InstallFromEntries(FILE *file,
         record.cnmt_info.content_type = NcmContentType_Meta;
         cnmt_records.push_back(std::move(record));
     }
+    printf("[nspinstall] CNMT procesados: %zu\n", cnmt_records.size());
 
     struct DeferredPush { std::uint64_t base_title_id; NcmContentMetaKey key; };
     std::vector<DeferredPush> deferred_pushes;
@@ -409,10 +422,21 @@ InstallResult InstallFromEntries(FILE *file,
             result.error_message = "Failed to set content meta records";
             return result;
         }
+#if defined(SWITCH)
+        appletReportUserIsActive(); // Commit() puede tardar varios segundos
+                                     // (sobre todo la 1ra vez que se escribe
+                                     // la base de datos de metadatos) y no
+                                     // reporta progreso propio
+#endif
+        printf("[nspinstall] haciendo meta_db.Commit() (titleid %016llX)...\n", (unsigned long long)key.id);
         if(!meta_db.Commit()) {
             result.error_message = "Failed to commit content meta database";
             return result;
         }
+        printf("[nspinstall] Commit() OK\n");
+#if defined(SWITCH)
+        appletReportUserIsActive();
+#endif
         const std::uint64_t base_title_id =
             GetBaseTitleId(key.id, static_cast<std::uint8_t>(key.type));
         deferred_pushes.push_back({ base_title_id, key });
@@ -427,11 +451,15 @@ InstallResult InstallFromEntries(FILE *file,
 
     const std::uint32_t total_ncas = static_cast<std::uint32_t>(all_content_infos.size());
     std::uint32_t nca_index = 0;
+    printf("[nspinstall] instalando %u NCA(s) de contenido...\n", total_ncas);
 
     for(const auto &content_info : all_content_infos) {
         nca_index++;
         const std::string nca_id_hex = NcaIdToString(content_info.content_id);
-        if(storage.Has(content_info.content_id) && !config.reinstall_ncas) continue;
+        if(storage.Has(content_info.content_id) && !config.reinstall_ncas) {
+            printf("[nspinstall] nca %u/%u (%s) ya existe, se omite\n", nca_index, total_ncas, nca_id_hex.c_str());
+            continue;
+        }
 
         const GenericEntry *nca_entry = FindEntryByNcaId(entries, nca_id_hex);
         if(!nca_entry) {
@@ -439,22 +467,33 @@ InstallResult InstallFromEntries(FILE *file,
             return result;
         }
 
+        printf("[nspinstall] nca %u/%u -> %s (%llu bytes)\n", nca_index, total_ncas,
+               nca_entry->name.c_str(), (unsigned long long)nca_entry->size);
         if(!InstallSingleNca(file, container_path, nca_entry,
                               storage, content_info.content_id,
                               progress, nca_index, total_ncas, hk_ptr)) {
             result.error_message = "Failed to install NCA: " + nca_entry->name;
             return result;
         }
+        printf("[nspinstall] nca %u/%u instalado OK\n", nca_index, total_ncas);
         registered_ids.push_back(content_info.content_id);
     }
 
+    printf("[nspinstall] empujando %zu registro(s) de aplicacion...\n", deferred_pushes.size());
     for(const auto &dp : deferred_pushes) {
+#if defined(SWITCH)
+        appletReportUserIsActive(); // PushApplicationRecord tambien es IPC
+                                     // bloqueante sin progreso propio
+#endif
+        printf("[nspinstall] PushApplicationRecord(titleid %016llX)...\n", (unsigned long long)dp.base_title_id);
         if(!PushApplicationRecord(dp.base_title_id, config.dest_storage_id, dp.key)) {
             result.error_message = "Failed to push application record";
             return result;
         }
+        printf("[nspinstall] registro de aplicacion empujado OK\n");
     }
 
+    printf("[nspinstall] instalacion completa\n");
     result.success = true;
     cleanup_guard.armed = false;
     return result;
