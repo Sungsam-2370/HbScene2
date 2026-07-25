@@ -296,55 +296,58 @@ bool MainDisplay::checkSelfUpdate()
 	          << " (actual: " << APP_VERSION << ")" << std::endl;
 
 	// --- Dialogo de confirmacion ---
-	// Usamos una variable de sincronizacion simple porque AlertDialog
-	// funciona de forma asincrona (callbacks). Bloqueamos el loop
-	// de eventos con una flag hasta que el usuario responda.
+	// Antes usaba AlertDialog (caja blanca flotante). Ahora usa la misma
+	// composicion visual que la pantalla de descarga de un componente:
+	// fondo oscurecido de pantalla completa (DimOverlay) + texto suelto,
+	// sin ninguna caja contenedora, mismo tipo/color/tamaño de letra que
+	// AppDetails (downloadStatus = 30/SCALER, downloadPercent = 24/SCALER,
+	// ambos blancos).
 	bool userConfirmed = false;
 	bool userResponded = false;
 
-	std::string msg =
+	CST_Color white = { 0xFF, 0xFF, 0xFF, 0xFF };
+
+	DimOverlay confirmDim;
+	TextElement confirmTitle("Actualizacion disponible", 30 / SCALER, &white);
+	TextElement confirmMsg(
 		"Nueva version disponible: v" + remoteVersion + "\n"
 		"Version actual:           v" + std::string(APP_VERSION) + "\n\n"
 		"Se descargara y reemplazara el .nro en la SD.\n"
-		"Deberas reiniciar la app para aplicar la actualizacion.\n\n"
-		"[A] Actualizar    [B] Cancelar";
+		"Deberas reiniciar la app para aplicar la actualizacion.",
+		20 / SCALER, &white, NORMAL, 700);
+	TextElement confirmFooter("[A] Actualizar    [B] Cancelar", 24 / SCALER, &white);
 
-	auto* dlg = new AlertDialog("Actualizacion disponible", msg);
-	dlg->onConfirm = [&]() {
-		userConfirmed = true;
-		userResponded = true;
-		dlg->hidden = true;
-	};
-	dlg->onCancel = [&]() {
-		userConfirmed = false;
-		userResponded = true;
-		dlg->hidden = true;
-	};
-	super::append(dlg);
-	dlg->show();
+	confirmTitle.update();
+	confirmMsg.update();
+	confirmFooter.update();
 
-	// Mini event-loop hasta que el usuario responda.
-	// NO llamamos dlg->process(events) porque chesto intenta navegar con
-	// botones fisicos dentro del dialogo y produce un crash.
-	// Manejamos A y B manualmente aqui, y el touch funciona via render+SDL.
+	confirmTitle.position(0, SCREEN_HEIGHT / 2 - 120 / SCALER);
+	confirmMsg.position(0, SCREEN_HEIGHT / 2 - 60 / SCALER);
+	confirmFooter.position(0, SCREEN_HEIGHT / 2 + 110 / SCALER);
+
+	confirmTitle.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	confirmMsg.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	confirmFooter.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
+	super::append(&confirmDim);
+	super::append(&confirmTitle);
+	super::append(&confirmMsg);
+	super::append(&confirmFooter);
+
+	// Mini event-loop hasta que el usuario responda (solo A/B fisicos,
+	// no hay ningun Button navegable involucrado esta vez).
 	while (!userResponded) {
 		InputEvents* events = new InputEvents();
 		while (events->update()) {
 			if (events->pressed(A_BUTTON)) {
 				userConfirmed = true;
 				userResponded = true;
-				dlg->hidden = true;
 				break;
 			}
 			if (events->pressed(B_BUTTON)) {
 				userConfirmed = false;
 				userResponded = true;
-				dlg->hidden = true;
 				break;
-			}
-			// touch: dejar que el dialogo lo maneje (no crashea con touch)
-			if (events->isTouch()) {
-				dlg->process(events);
 			}
 		}
 		RootDisplay::mainDisplay->render(NULL);
@@ -352,8 +355,10 @@ bool MainDisplay::checkSelfUpdate()
 		CST_Delay(16);
 	}
 
-	super::remove(dlg);
-	delete dlg;
+	super::remove(&confirmDim);
+	super::remove(&confirmTitle);
+	super::remove(&confirmMsg);
+	super::remove(&confirmFooter);
 
 	if (!userConfirmed)
 		return false;
@@ -361,19 +366,52 @@ bool MainDisplay::checkSelfUpdate()
 	// --- Descarga a archivo temporal ---
 	std::cout << "[self-update] descargando " << downloadUrl << " -> " << APP_NRO_TMP << std::endl;
 
-	// Mostrar mensaje de progreso (texto simple sobre pantalla)
-	auto* progressMsg = new TextElement(
-		"Descargando actualizacion, por favor espera...",
-		24, nullptr, NORMAL, 700
-	);
-	progressMsg->constrain(ALIGN_CENTER_BOTH);
-	super::append(progressMsg);
+	// Mismo estilo que la pantalla de descarga de un componente: dim de
+	// pantalla completa + texto de estado + barra de progreso real (antes
+	// esto era solo un texto estatico de "por favor espera", sin numero
+	// ni barra -- la descarga del propio update no reportaba progreso).
+	DimOverlay downloadDim;
+	TextElement downloadStatusText("Descargando actualizacion...", 30 / SCALER, &white);
+	TextElement downloadPercentText("0%", 24 / SCALER, &white);
+	ProgressBar downloadBar;
+	downloadBar.width = 450;
+	downloadBar.percent = 0;
+	downloadBar.dimBg = false; // el dim ya lo hace downloadDim, no doble-oscurecer
+
+	downloadStatusText.update();
+	downloadPercentText.update();
+
+	downloadBar.position(SCREEN_WIDTH / 2 - downloadBar.width / 2, SCREEN_HEIGHT / 2);
+	downloadStatusText.position(0, SCREEN_HEIGHT / 2 - 70 / SCALER);
+	downloadPercentText.position(0, SCREEN_HEIGHT / 2 + 40 / SCALER);
+
+	downloadStatusText.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	downloadPercentText.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
+	super::append(&downloadDim);
+	super::append(&downloadStatusText);
+	super::append(&downloadBar);
+	super::append(&downloadPercentText);
 	RootDisplay::mainDisplay->render(NULL);
+
+	// conectar el progreso real de curl (mismo mecanismo networking_callback
+	// que usa AppDetails) a esta barra en particular
+	this->selfUpdateProgressBar = &downloadBar;
+	this->selfUpdatePercentText = &downloadPercentText;
+	networking_callback = MainDisplay::updateSelfUpdateProgress;
+	networking_callback_data = nullptr;
 
 	bool dlOk = downloadFileToDisk(downloadUrl, APP_NRO_TMP);
 
-	super::remove(progressMsg);
-	delete progressMsg;
+	networking_callback = nullptr;
+	networking_callback_data = nullptr;
+	this->selfUpdateProgressBar = nullptr;
+	this->selfUpdatePercentText = nullptr;
+
+	super::remove(&downloadDim);
+	super::remove(&downloadStatusText);
+	super::remove(&downloadBar);
+	super::remove(&downloadPercentText);
 
 	if (!dlOk) {
 		std::cout << "[self-update] fallo la descarga" << std::endl;
@@ -742,6 +780,44 @@ int MainDisplay::updateLoader(void* clientp, double dlnow)
 	MainDisplay* display = (MainDisplay*)RootDisplay::mainDisplay;
 	if (display->spinner)
 		display->spinner->angle += 10;
+	display->render(NULL);
+
+	AppDetails::lastFrameTime = CST_GetTicks();
+
+	return 0;
+}
+
+int MainDisplay::updateSelfUpdateProgress(void* clientp, double dlnow)
+{
+	(void)clientp;
+	int now = CST_GetTicks();
+	int diff = now - AppDetails::lastFrameTime;
+
+	double amount = dlnow;
+	if (amount < 0) amount = 0;
+	if (amount > 1) amount = 1;
+
+	// mismo throttle que updateLoader: no redibujar mas seguido que ~32ms,
+	// salvo que ya estemos al 100%
+	if (diff < 32 && amount != 1)
+		return 0;
+
+#if defined(SWITCH)
+	appletReportUserIsActive();
+#endif
+
+	MainDisplay* display = (MainDisplay*)RootDisplay::mainDisplay;
+	if (display->selfUpdateProgressBar)
+		display->selfUpdateProgressBar->percent = amount;
+
+	if (display->selfUpdatePercentText)
+	{
+		int percentInt = (int)(amount * 100);
+		display->selfUpdatePercentText->setText(std::to_string(percentInt) + "%");
+		display->selfUpdatePercentText->update();
+		display->selfUpdatePercentText->constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	}
+
 	display->render(NULL);
 
 	AppDetails::lastFrameTime = CST_GetTicks();

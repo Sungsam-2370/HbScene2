@@ -16,7 +16,6 @@
 
 #ifdef SWITCH
 #include <switch.h>
-#include "nspinstall/NspAutoInstall.hpp"
 #endif
 
 using namespace rapidjson;
@@ -133,41 +132,14 @@ int Get::install(Package& package, bool resume)
 
 	package.runtime_install_status.clear();
 
-#ifdef SWITCH
-	// Paso 3 del flujo pedido: si (y solo si) el repo.json trae la clave
-	// "instalacion", ya se descargaron y extrajeron todos los zips del
-	// paquete (incluyendo multi-zip), asi que el .nsp referenciado ya
-	// deberia existir en el SD. Intentamos instalarlo ahora.
-	if (!package.getInstallNsp().empty())
-	{
-		// IMPORTANTE: sin esto, la pantalla queda congelada durante toda la
-		// instalacion del NSP (puede tardar varios segundos con titulos
-		// grandes) -- ya que networking_callback es quien llama a
-		// appletReportUserIsActive(), bombea el input y fuerza el render
-		// (ver AppDetails::updateCurrentlyDisplayedPopup). Sin esos "latidos"
-		// periodicos la consola/la app se ve colgada justo al final de la
-		// extraccion, aunque la instalacion real termine bien.
-		if (networking_callback != nullptr)
-			networking_callback(nullptr, 0.0); // resetea la barra a 0% al iniciar instalacion
-
-		auto nspResult = nspinstall::InstallNspIfRequested(
-			ROOT_PATH, package.getInstallNsp(), false,
-			[](std::uint64_t done, std::uint64_t total, const std::string &) {
-				if (networking_callback != nullptr && total > 0)
-					networking_callback(nullptr, (double)done / (double)total);
-			});
-
-		if (networking_callback != nullptr)
-			networking_callback(nullptr, 1.0);
-
-		if (!nspResult.nothing_to_do)
-		{
-			printf("--> Auto-instalacion de NSP [%s]: %s\n",
-			       package.getInstallNsp().c_str(), nspResult.success ? "OK" : "FALLO");
-			package.runtime_install_status = nspResult.message;
-		}
-	}
-#endif
+	// NOTA: la auto-instalacion del NSP (repo.json: "instalacion") YA NO se
+	// dispara aca. Antes vivia en este mismo Get::install(), encadenada
+	// justo despues de la extraccion, pero eso la hacia indistinguible de
+	// la extraccion para el usuario (misma pantalla, mismo "Extrayendo").
+	// Ahora es un paso explicito y separado que dispara AppDetails::proceed()
+	// DESPUES de que este Get::install() retorna, con su propia pantalla de
+	// progreso (ver AppDetails.cpp). Get.cpp solo deja el .nsp ya extraido
+	// en el SD, listo para que ese paso lo instale.
 
 	// clear any progress callbacks before updating repo metadata
 	extern libget_progress_callback_t networking_callback;

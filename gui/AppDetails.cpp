@@ -3,6 +3,7 @@
 
 #if defined(SWITCH)
 #include <switch.h>
+#include "../libs/get/src/nspinstall/NspAutoInstall.hpp"
 #endif
 
 #if defined(__WIIU__)
@@ -255,6 +256,40 @@ void AppDetails::proceed()
 			appCard->icon.saveToJpg(iconSavePath);
 			//TODO: load from a cache instead!!
 		}
+
+#if defined(SWITCH)
+		// --- Paso 3: instalacion del NSP (repo.json: "instalacion") ---
+		// Explicitamente SEPARADO de la descarga/extraccion de arriba (que
+		// termina en get->install()). Antes esto estaba encadenado dentro
+		// de Get::install(), lo que lo hacia indistinguible de la
+		// extraccion para el usuario. Ahora es su propio paso, con su
+		// propia etapa de progreso, y solo se ejecuta si la descarga y
+		// extraccion ya terminaron bien.
+		if (succeeded && !package->getInstallNsp().empty())
+		{
+			downloadStatus.setText("Instalando NSP...");
+			downloadStatus.update();
+			downloadPercent.setText("0%");
+			downloadPercent.update();
+			downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+			downloadProgress.percent = 0;
+			RootDisplay::mainDisplay->render(NULL);
+
+			auto nspResult = nspinstall::InstallNspIfRequested(
+				ROOT_PATH, package->getInstallNsp(), false,
+				[](std::uint64_t done, std::uint64_t total, const std::string &) {
+					// reutiliza el mismo callback de progreso/heartbeat que
+					// ya usa la descarga -- todavia esta activo aca porque
+					// postInstallHook() (que lo limpia) corre despues
+					if (networking_callback != nullptr && total > 0)
+						networking_callback(nullptr, (double)done / (double)total);
+				});
+
+			package->runtime_install_status = nspResult.message;
+			printf("--> Instalacion de NSP [%s]: %s\n",
+			       package->getInstallNsp().c_str(), nspResult.success ? "OK" : "FALLO");
+		}
+#endif
 	}
 
 	postInstallHook();
