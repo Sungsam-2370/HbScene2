@@ -140,7 +140,26 @@ int Get::install(Package& package, bool resume)
 	// deberia existir en el SD. Intentamos instalarlo ahora.
 	if (!package.getInstallNsp().empty())
 	{
-		auto nspResult = nspinstall::InstallNspIfRequested(ROOT_PATH, package.getInstallNsp(), false);
+		// IMPORTANTE: sin esto, la pantalla queda congelada durante toda la
+		// instalacion del NSP (puede tardar varios segundos con titulos
+		// grandes) -- ya que networking_callback es quien llama a
+		// appletReportUserIsActive(), bombea el input y fuerza el render
+		// (ver AppDetails::updateCurrentlyDisplayedPopup). Sin esos "latidos"
+		// periodicos la consola/la app se ve colgada justo al final de la
+		// extraccion, aunque la instalacion real termine bien.
+		if (networking_callback != nullptr)
+			networking_callback(nullptr, 0.0); // resetea la barra a 0% al iniciar instalacion
+
+		auto nspResult = nspinstall::InstallNspIfRequested(
+			ROOT_PATH, package.getInstallNsp(), false,
+			[](std::uint64_t done, std::uint64_t total, const std::string &) {
+				if (networking_callback != nullptr && total > 0)
+					networking_callback(nullptr, (double)done / (double)total);
+			});
+
+		if (networking_callback != nullptr)
+			networking_callback(nullptr, 1.0);
+
 		if (!nspResult.nothing_to_do)
 		{
 			printf("--> Auto-instalacion de NSP [%s]: %s\n",
