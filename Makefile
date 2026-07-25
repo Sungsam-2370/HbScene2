@@ -35,12 +35,19 @@ endif
 # OJO: a diferencia de SOURCES/CFLAGS (que chesto ya exporta), LIBS no viaja
 # solo hacia el sub-make que hace el link final, asi que hay que exportarla
 # a mano o el linker nunca la va a ver.
-ifeq (switch,$(MAKECMDGOALS))
-SOURCES   += libs/get/src/nspinstall
-SOURCES   += libs/get/src/nspinstall/zstd
-LIBS      += -lmbedtls -lmbedx509 -lmbedcrypto
-export LIBS
-endif
+# PRUEBA DE AISLAMIENTO: bloque comentado por completo. Con todos los
+# "ganchos" (Package.hpp/GetRepo.cpp/Get.cpp/AppDetails.cpp/main.cpp) ya
+# revertidos a su original y el error persistiendo igual, la unica variable
+# que queda es tener este modulo compilado dentro del binario aunque nadie
+# lo llame. Comentando esto, el binario final no deberia incluir NADA de
+# nspinstall/zstd/mbedtls -- lo mas cercano posible a una build vieja
+# funcional, para confirmar o descartar esta hipotesis de una vez.
+#ifeq (switch,$(MAKECMDGOALS))
+#SOURCES   += libs/get/src/nspinstall
+#SOURCES   += libs/get/src/nspinstall/zstd
+#LIBS      += -lmbedtls -lmbedx509 -lmbedcrypto
+#export LIBS
+#endif
  
 include libs/get/Makefile
 include libs/chesto/Makefile
