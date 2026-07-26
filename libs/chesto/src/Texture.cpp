@@ -274,7 +274,7 @@ bool Texture::saveToJpg(std::string &path, int quality)
 	// reset the target texture
 	SDL_SetRenderTarget(getRenderer(), NULL);
 
-	// save the surface to the path, as a real JPG
+	// save the surface to the path
 	return CST_SaveJPG(target, path.c_str(), quality);
 }
 

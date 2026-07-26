@@ -118,14 +118,6 @@ bool Package::downloadZip2(std::string_view tmp_path, float*, bool resume, int z
 
 	download_metadata_t metadata = {};
 
-	// find out this individual zip's real size via a lightweight HEAD request.
-	// NOTE: we can't use this->download_size here -- that field comes from
-	// repo.json's "filesize", which is the COMBINED total across all of this
-	// package's zips, not the size of this one file.
-	download_metadata_t remote_metadata = {};
-	if (getRemoteFileMetadata(this->zipUrl2, &remote_metadata))
-		metadata.content_length = remote_metadata.content_length;
-
 	bool success = downloadFileToDiskWithMetadata(this->zipUrl2, downloadPath, resume, &metadata);
 
 	if (!success)
@@ -528,11 +520,6 @@ bool Package::downloadZip3(std::string_view tmp_path, float*, bool resume, int z
 	std::string downloadPath = std::string(tmp_path) + this->pkg_name + "_3.zip";
 	download_metadata_t metadata = {};
 
-	// see downloadZip2 for why this can't come from repo.json's "filesize"
-	download_metadata_t remote_metadata = {};
-	if (getRemoteFileMetadata(this->zipUrl3, &remote_metadata))
-		metadata.content_length = remote_metadata.content_length;
-
 	bool success = downloadFileToDiskWithMetadata(this->zipUrl3, downloadPath, resume, &metadata);
 
 	if (!success)
@@ -570,11 +557,6 @@ bool Package::downloadZip4(std::string_view tmp_path, float*, bool resume, int z
 
 	std::string downloadPath = std::string(tmp_path) + this->pkg_name + "_4.zip";
 	download_metadata_t metadata = {};
-
-	// see downloadZip2 for why this can't come from repo.json's "filesize"
-	download_metadata_t remote_metadata = {};
-	if (getRemoteFileMetadata(this->zipUrl4, &remote_metadata))
-		metadata.content_length = remote_metadata.content_length;
 
 	bool success = downloadFileToDiskWithMetadata(this->zipUrl4, downloadPath, resume, &metadata);
 
@@ -828,7 +810,7 @@ bool Package::remove(std::string_view pkg_path)
 	auto full_pkg_path = std::string(pkg_path) + this->pkg_name;
 	std::remove((full_pkg_path + "/info.json").c_str());
 	std::remove((full_pkg_path + "/icon.jpg").c_str()); // clean up icon if present
-	std::remove((full_pkg_path + "/icon.png").c_str()); // clean up legacy png icon, if present from before the jpg migration
+	std::remove((full_pkg_path + "/icon.png").c_str()); // por si quedo un icono viejo cacheado en png de una version anterior
 
 	rmdir((std::string(pkg_path) + this->pkg_name).c_str());
 

@@ -19,8 +19,6 @@ const char *TextElement::fontPaths[] = {
 std::map<std::string, std::string> TextElement::i18nCache = {};
 std::string TextElement::curLang = "en-us";
 
-std::map<std::string, TTF_Font*> TextElement::fontCache = {};
-
 bool TextElement::useSimplifiedChineseFont = false;
 bool TextElement::useKoreanFont = false;
 bool TextElement::useJapaneseFont = false;
@@ -224,25 +222,7 @@ void TextElement::update(bool forceUpdate)
 		if (customFontPath != "") {
 			fontPath = customFontPath.c_str();
 		}
-
-		// reuse an already-open font handle for this exact path+size if we
-		// have one -- opening/parsing a TTF file is the expensive part here,
-		// and doing it once per unique text on a screen full of AppCards
-		// (title, version, status per card) was the main cost of building
-		// or refreshing a category/search view
-		std::string fontKey = std::string(fontPath) + "_" + std::to_string(textSize);
-		TTF_Font* font;
-		auto fontIt = fontCache.find(fontKey);
-		if (fontIt != fontCache.end())
-		{
-			font = fontIt->second;
-		}
-		else
-		{
-			font = TTF_OpenFont(fontPath, textSize);
-			if (font)
-				fontCache[fontKey] = font;
-		}
+		TTF_Font* font = TTF_OpenFont(fontPath, textSize);
 
 		CST_Surface *textSurface = ((actualFont == ICON) || (textWrappedWidth == 0)) ?
 			TTF_RenderUTF8_Blended(font, text.c_str(), textColor) :
@@ -252,19 +232,10 @@ void TextElement::update(bool forceUpdate)
 		loadFromSurfaceSaveToCache(key, textSurface);
 
 		CST_FreeSurface(textSurface);
-		// NOTE: font is NOT closed here anymore -- it's owned by fontCache
-		// and reused for the next text that needs this same path+size.
-		// See TextElement::closeAllFonts(), called once at app shutdown.
+		TTF_CloseFont(font);
 	}
 
 	getTextureSize(&width, &height);
-}
-
-void TextElement::closeAllFonts()
-{
-	for (auto& pair : fontCache)
-		TTF_CloseFont(pair.second);
-	fontCache.clear();
 }
 
 std::string i18n(std::string key) {

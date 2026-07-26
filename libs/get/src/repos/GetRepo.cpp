@@ -109,11 +109,6 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 			package->author = cur["author"].GetString();
 		if (cur.HasMember("description"))
 			package->short_desc = cur["description"].GetString();
-		// instruccion final post-instalacion; solo se setea si el paquete
-		// realmente trae esta linea -- si no existe, queda vacio a proposito
-		// (asi el popup de descarga exitosa no muestra "n/a" ni nada de mas)
-		if (cur.HasMember("mensaje"))
-			package->install_message = cur["mensaje"].GetString();
 		if (cur.HasMember("details"))
 			package->long_desc = std::regex_replace(cur["details"].GetString(), std::regex("\\\\n"), "\n");
 		if (cur.HasMember("version"))

@@ -242,13 +242,10 @@ void AppDetails::proceed()
 	preInstallHook();
 
 	// install or remove this package based on the package status
-	bool wasUninstall = (this->package->getStatus() == INSTALLED);
-	bool succeeded;
-
-	if (wasUninstall) {
-		succeeded = get->remove(*package);
+	if (this->package->getStatus() == INSTALLED) {
+		get->remove(*package);
 	} else {
-		succeeded = get->install(*package);
+		get->install(*package);
 		// save the icon to the SD card, for offline use
 		if (appCard != NULL) {
 			auto iconSavePath = std::string(get->mPkg_path) + "/" + package->getPackageName() + "/icon.jpg";
@@ -259,54 +256,14 @@ void AppDetails::proceed()
 
 	postInstallHook();
 
-	// forzar re-evaluacion del status tras instalar/borrar
-	this->package->updateStatus(get->mPkg_path);
+	// refresh the screen
+    RootDisplay::switchSubscreen(nullptr);
 
-	this->operating = false;
-	this->appList->update();
+    // forzar re-evaluacion del status tras borrar
+    this->package->updateStatus(get->mPkg_path);
 
-	// si nos vamos a auto-cerrar (autoactualizacion de la propia app), no
-	// tiene sentido mostrar un popup que nadie va a poder leer
-	if (quitAfterInstall)
-	{
-		RootDisplay::switchSubscreen(nullptr);
-		return;
-	}
-
-	// solo mostramos el resultado para instalaciones, no para desinstalar
-	if (wasUninstall)
-	{
-		RootDisplay::switchSubscreen(nullptr);
-		return;
-	}
-
-	std::string resultTitle;
-	std::string resultMsg;
-
-	if (!succeeded)
-	{
-		resultTitle = "Descarga fallida";
-		resultMsg = "DESCARGA FALLIDA\n\nIntenta descargar de nuevo o revisa la fecha y hora de tu consola (usa DBI con la opcion Time Sync NTP para arreglarlo)";
-	}
-	else
-	{
-		resultTitle = "Descarga exitosa";
-		resultMsg = "DESCARGA EXITOSA";
-		if (!this->package->getInstallMessage().empty())
-			resultMsg += "\n\n" + this->package->getInstallMessage();
-	}
-
-	resultDialog = new AlertDialog(resultTitle, resultMsg);
-	resultDialog->onConfirm = [this]() {
-		resultDialog->hidden = true;
-		// recien ahora volvemos a la pantalla principal -- si hacemos esto
-		// antes de que el usuario cierre el popup con A, el subscreen actual
-		// (y el dialogo que cuelga de el) se destruyen en el siguiente frame,
-		// dejando el callback de este mismo boton apuntando a memoria liberada
-		RootDisplay::switchSubscreen(nullptr);
-	};
-	super::append(resultDialog);
-	resultDialog->show();
+    this->operating = false;
+    this->appList->update();
 }
 
 void AppDetails::launch()

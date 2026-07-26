@@ -3,12 +3,12 @@ import os, json, zipfile, time, datetime, hashlib, re
 
 print("Content-type: text/html\n\n")
 
-SCREEN_REGEX = re.compile("^screen[1-9].jpg$")
+SCREEN_REGEX = re.compile("^screen[1-9].png$")
 
 def zipdir(path, ziph):
     for root, dirs, files in os.walk(path):
         for file in files:
-            if root == "." and (file == "icon.jpg" or file == "screen.jpg" or file == ".deletetoupdate"):
+            if root == "." and (file == "icon.png" or file == "screen.png" or file == ".deletetoupdate"):
                 continue
             ziph.write(os.path.join(root, file))
 
@@ -55,7 +55,7 @@ for package in os.listdir("packages"):
         manifest = ""
         for root, dirs, files in os.walk("."):
             for file in files:
-                if root == "." and (file == "manifest.install" or file == "icon.jpg" or file == "info.json" or file == "screen.jpg" or file == ".deletetoupdate" or SCREEN_REGEX.match(file)):
+                if root == "." and (file == "manifest.install" or file == "icon.png" or file == "info.json" or file == "screen.png" or file == ".deletetoupdate" or SCREEN_REGEX.match(file)):
                     continue
                 relPath = os.path.join(root, file)[2:]
                 relPath.replace("\\", "/")
@@ -131,14 +131,6 @@ for package in os.listdir("packages"):
                 target[val] = props[val]
             else:
                 target[val] = "n/a"
-
-        # "mensaje": instruccion final que se muestra al terminar una
-        # descarga exitosa. A diferencia de los campos de arriba, NO se
-        # rellena con "n/a" si falta -- si el paquete no define "mensaje",
-        # el campo simplemente no se incluye, y la app solo muestra
-        # "DESCARGA EXITOSA" sin nada mas.
-        if "mensaje" in props and props["mensaje"]:
-            target["mensaje"] = props["mensaje"]
 
     if needsCaching:    # no deletetoupdate loaded, we need to make one
         del_to_update = open(".deletetoupdate", 'w')

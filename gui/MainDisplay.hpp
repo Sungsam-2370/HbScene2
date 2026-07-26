@@ -1,9 +1,7 @@
 #include "AppList.hpp"
-#include "DimOverlay.hpp"
 #include "../libs/chesto/src/RootDisplay.hpp"
 #include "../libs/chesto/src/TextElement.hpp"
 #include "../libs/chesto/src/Button.hpp"
-#include "../libs/chesto/src/ProgressBar.hpp"
 #include <unordered_map>
 
 #if defined(MUSIC)
@@ -57,14 +55,6 @@ public:
 	bool atLeastOneEnabled = false;
 
 	static int updateLoader(void* clientp, double dlnow);
-
-	// callback de progreso real para la descarga del .nro de auto-actualizacion
-	// (mismo patron que AppDetails::updateCurrentlyDisplayedPopup, pero para
-	// la pantalla de "actualizacion disponible" en vez del popup de un
-	// componente). Los punteros solo son validos mientras dura esa descarga.
-	static int updateSelfUpdateProgress(void* clientp, double dlnow);
-	ProgressBar* selfUpdateProgressBar = nullptr;
-	TextElement* selfUpdatePercentText = nullptr;
 
 	bool showingSplash = true;
 	bool renderedSplash = false;

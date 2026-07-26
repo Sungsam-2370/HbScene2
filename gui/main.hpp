@@ -31,8 +31,8 @@ struct ObfStr {
 
 // URLs ofuscadas — inline constexpr garantiza una sola instancia en el binario
 // (a diferencia de static constexpr, que crea una copia por cada .cpp que incluye este header)
-inline constexpr auto _OBF_META_REPO   = ObfStr("https://raw.githubusercontent.com/Sungsam-2370/Delta/main");
-inline constexpr auto _OBF_SWITCH_REPO = ObfStr("https://raw.githubusercontent.com/Sungsam-2370/Delta/main");
+inline constexpr auto _OBF_META_REPO   = ObfStr("https://raw.githubusercontent.com/Sungsam-2370/Gamma/main");
+inline constexpr auto _OBF_SWITCH_REPO = ObfStr("https://raw.githubusercontent.com/Sungsam-2370/Gamma/main");
 inline constexpr auto _OBF_WIIU_REPO   = ObfStr("https://wiiu.cdn.fortheusers.org");
 inline constexpr auto _OBF_3DS_REPO    = ObfStr("https://3ds.apps.fortheusers.org");
 inline constexpr auto _OBF_WII_REPO    = ObfStr("https://hbb1.oscwii.org");

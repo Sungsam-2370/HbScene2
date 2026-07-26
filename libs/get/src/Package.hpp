@@ -92,14 +92,6 @@ public:
 		return short_desc;
 	}
 
-	// instruccion final que se muestra en el popup de "descarga exitosa"
-	// (viene del campo "mensaje" de repo.json/info.json). Vacio si el
-	// paquete no define ninguna.
-	[[nodiscard]] const std::string& getInstallMessage() const
-	{
-		return install_message;
-	}
-
 	[[nodiscard]] const std::string& getLongDescription() const
 	{
 		return long_desc;
@@ -170,7 +162,6 @@ public:
 	std::string author;
 	std::string short_desc;
 	std::string long_desc;
-	std::string install_message; // "mensaje" en repo.json: instruccion final post-instalacion
 
 
 	std::string url;

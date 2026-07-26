@@ -2,7 +2,7 @@ BINARY      := scene_eshop
  
 APP_TITLE   := Scene Eshop
 APP_AUTHOR  := Luigi Switch Scene
-APP_VERSION := 5.0.0
+APP_VERSION := 4.0.0
  
 SOURCES     += gui console
 DEBUG_BUILD := 0
@@ -20,34 +20,6 @@ ifeq (wiiu,$(MAKECMDGOALS))
 SOURCES   += libs/librpxloader/source
 INCLUDES  += ../libs/librpxloader/include
 endif
-
-# Auto-instalacion de NSP (repo.json: "instalacion") -- solo aplica a Switch,
-# ya que depende de NCM/ES (instalacion de titulos) y de libnx. mbedtls hace
-# falta para derivar la header key de las NCA (CryptoUtils.cpp).
-#
-# NOTA sobre zstd/.ncz: NO hay paquete oficial "switch-zstd" en el repo de
-# pacman de devkitPro (solo un PR viejo sin mergear), asi que en vez de
-# depender de un portlib vendorizamos un subset de zstd (solo la ruta de
-# DEScompresion, sin threading/pool) directo en libs/get/src/nspinstall/zstd
-# y lo compilamos como codigo fuente propio del proyecto -- cero dependencia
-# externa nueva, cero pasos de CI adicionales.
-#
-# OJO: a diferencia de SOURCES/CFLAGS (que chesto ya exporta), LIBS no viaja
-# solo hacia el sub-make que hace el link final, asi que hay que exportarla
-# a mano o el linker nunca la va a ver.
-# PRUEBA DE AISLAMIENTO: bloque comentado por completo. Con todos los
-# "ganchos" (Package.hpp/GetRepo.cpp/Get.cpp/AppDetails.cpp/main.cpp) ya
-# revertidos a su original y el error persistiendo igual, la unica variable
-# que queda es tener este modulo compilado dentro del binario aunque nadie
-# lo llame. Comentando esto, el binario final no deberia incluir NADA de
-# nspinstall/zstd/mbedtls -- lo mas cercano posible a una build vieja
-# funcional, para confirmar o descartar esta hipotesis de una vez.
-#ifeq (switch,$(MAKECMDGOALS))
-#SOURCES   += libs/get/src/nspinstall
-#SOURCES   += libs/get/src/nspinstall/zstd
-#LIBS      += -lmbedtls -lmbedx509 -lmbedcrypto
-#export LIBS
-#endif
  
 include libs/get/Makefile
 include libs/chesto/Makefile

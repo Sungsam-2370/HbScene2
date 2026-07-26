@@ -323,19 +323,6 @@ static size_t DiskWriteCallback(void* contents, size_t size, size_t num_files, v
 	auto* data_struct = (ntwrk_struct_t*)userp;
 	size_t realsize = size * num_files;
 
-	// if this single chunk is bigger than our whole buffer, there's no point
-	// buffering it at all -- flush what we have, then write it straight to disk
-	if (realsize >= data_struct->data_size)
-	{
-		if (data_struct->offset > 0)
-		{
-			fwrite(data_struct->data, data_struct->offset, 1, data_struct->out);
-			data_struct->offset = 0;
-		}
-		fwrite(contents, realsize, 1, data_struct->out);
-		return realsize;
-	}
-
 	if (realsize + data_struct->offset >= data_struct->data_size)
 	{
 		fwrite(data_struct->data, data_struct->offset, 1, data_struct->out);
@@ -344,9 +331,7 @@ static size_t DiskWriteCallback(void* contents, size_t size, size_t num_files, v
 
 	memcpy(&data_struct->data[data_struct->offset], contents, realsize);
 	data_struct->offset += realsize;
-	// NOTE: no null-terminator write here -- this is a binary buffer, not a
-	// C string, and writing data[offset] = 0 after a copy that exactly fills
-	// the buffer (offset == data_size) was a 1-byte heap buffer overflow.
+	data_struct->data[data_struct->offset] = 0;
 	return realsize;
 }
 

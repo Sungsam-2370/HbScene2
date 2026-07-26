@@ -7,7 +7,6 @@
 // responsible for directly interacting with SDL!
 #include "DrawUtils.hpp"
 #include "RootDisplay.hpp"
-#include "TextElement.hpp"
 
 char* musicData = NULL;
 
@@ -67,7 +66,6 @@ bool CST_DrawInit(RootDisplay* root)
 void CST_DrawExit()
 {
 	//IMG_Quit();
-	TextElement::closeAllFonts();
 	TTF_Quit();
 
 	SDL_Delay(10);
@@ -141,16 +139,24 @@ bool CST_SavePNG(CST_Texture* texture, const char* file_name)
     int width, height;
     SDL_QueryTexture(texture, NULL, NULL, &width, &height);
     SDL_Surface* surface = SDL_CreateRGBSurface(0, width, height, 32, 0, 0, 0, 0);
+    if (!surface)
+    {
+        // SDL_CreateRGBSurface puede devolver NULL (memoria insuficiente,
+        // width/height invalidos, etc.). Sin este chequeo, la linea de
+        // abajo es un deref de puntero nulo.
+        printf("CST_SavePNG: SDL_CreateRGBSurface fallo (%dx%d): %s\n", width, height, SDL_GetError());
+        SDL_SetRenderTarget(renderer, target);
+        return false;
+    }
     SDL_RenderReadPixels(renderer, NULL, surface->format->format, surface->pixels, surface->pitch);
-    IMG_SavePNG(surface, file_name);
+    bool saved = (IMG_SavePNG(surface, file_name) == 0);
+    if (!saved)
+        printf("CST_SavePNG: IMG_SavePNG fallo para %s: %s\n", file_name, SDL_GetError());
     SDL_FreeSurface(surface);
     SDL_SetRenderTarget(renderer, target);
-	return true;
+	return saved;
 }
 
-// same as CST_SavePNG, but actually encodes real JPG bytes (not just a
-// renamed PNG) -- used for package icons/screenshots cached locally,
-// where we want the real file-size savings on the SD card
 bool CST_SaveJPG(CST_Texture* texture, const char* file_name, int quality)
 {
 	auto renderer = RootDisplay::mainDisplay->renderer;
@@ -162,21 +168,14 @@ bool CST_SaveJPG(CST_Texture* texture, const char* file_name, int quality)
     SDL_Surface* surface = SDL_CreateRGBSurface(0, width, height, 24, 0, 0, 0, 0);
     if (!surface)
     {
-        // SDL_CreateRGBSurface puede devolver NULL (memoria insuficiente,
-        // width/height invalidos, etc.). Sin este chequeo, la linea de
-        // abajo (surface->format->format) es un deref de puntero nulo que
-        // termina saltando a una direccion de codigo invalida dentro de
-        // libjpeg -- exactamente el crash "Instruction Abort en 0x0" que
-        // encontramos via crash log + addr2line (los registros X3-X7
-        // resolvian a error_exit/emit_message/output_message de jerror.c).
-        printf("[CST_SaveJPG] SDL_CreateRGBSurface fallo (%dx%d): %s\n", width, height, SDL_GetError());
+        printf("CST_SaveJPG: SDL_CreateRGBSurface fallo (%dx%d): %s\n", width, height, SDL_GetError());
         SDL_SetRenderTarget(renderer, target);
         return false;
     }
     SDL_RenderReadPixels(renderer, NULL, surface->format->format, surface->pixels, surface->pitch);
     bool saved = (IMG_SaveJPG(surface, file_name, quality) == 0);
     if (!saved)
-        printf("[CST_SaveJPG] IMG_SaveJPG fallo para %s: %s\n", file_name, SDL_GetError());
+        printf("CST_SaveJPG: IMG_SaveJPG fallo para %s: %s\n", file_name, SDL_GetError());
     SDL_FreeSurface(surface);
     SDL_SetRenderTarget(renderer, target);
 	return saved;
