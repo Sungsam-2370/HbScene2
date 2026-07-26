@@ -36,10 +36,6 @@ jobs:
         cmake -D CMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Wii.cmake -B build -G Ninja
         cmake --build build --parallel
         cmake --install build
-    - if: matrix.platform == 'switch'
-      name: Instalar dependencias extra (mbedtls para auto-instalacion de NSP)
-      run: |
-        dkp-pacman --noconfirm -Sy switch-mbedtls
     - name: Build ${{ matrix.platform }}
       run: |
         if [ "${{ matrix.platform }}" = "switch" ]; then
