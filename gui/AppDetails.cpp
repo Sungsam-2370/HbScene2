@@ -248,8 +248,16 @@ void AppDetails::proceed()
 		get->install(*package);
 		// save the icon to the SD card, for offline use
 		if (appCard != NULL) {
-			auto iconSavePath = std::string(get->mPkg_path) + "/" + package->getPackageName() + "/icon.jpg";
-			appCard->icon.saveToJpg(iconSavePath);
+			// IMPORTANTE: el caché LOCAL del icono se guarda como PNG
+			// (saveTo, ya probado/confiable) aunque el servidor lo tenga
+			// en JPG y la descarga/visualizacion en red siga usando JPG.
+			// saveToJpg()/IMG_SaveJPG parece tener un problema real en
+			// esta plataforma (crash reproducible con una sola instalacion,
+			// ver historial) -- como el cache local es solo un detalle
+			// interno (fallback offline), no hace falta que coincida con
+			// el formato remoto.
+			auto iconSavePath = std::string(get->mPkg_path) + "/" + package->getPackageName() + "/icon.png";
+			appCard->icon.saveTo(iconSavePath);
 			//TODO: load from a cache instead!!
 		}
 	}

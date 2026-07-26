@@ -14,7 +14,7 @@ AppCard::AppCard(Package& package, AppList* list)
 	, list(list)
 	, icon(package.getIconUrl().c_str(), [list, package] {
 		// if the icon fails to load, and we're offline, try to use one from the cache
-		auto iconSavePath = std::string(list->get->mPkg_path) + "/" + package.getPackageName() + "/icon.jpg";
+		auto iconSavePath = std::string(list->get->mPkg_path) + "/" + package.getPackageName() + "/icon.png";
 
 		// check if the package is installed, and if the icon file exists using stat
 		struct stat buffer;

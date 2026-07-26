@@ -252,7 +252,9 @@ bool Texture::saveTo(std::string &path)
 
 
 	// save the surface to the path
-	return CST_SavePNG(target, path.c_str());
+	bool ok = CST_SavePNG(target, path.c_str());
+	SDL_DestroyTexture(target); // misma fuga que en saveToJpg, mismo fix
+	return ok;
 }
 
 bool Texture::saveToJpg(std::string &path, int quality)
@@ -260,22 +262,38 @@ bool Texture::saveToJpg(std::string &path, int quality)
 	if (!mTexture)
 		return false;
 
+	printf("[saveToJpg] iniciando, %dx%d -> %s\n", texW, texH, path.c_str());
+
 	// render the texture to one that can be saved (TARGET ACCESS)
 	CST_Texture* target = SDL_CreateTexture(getRenderer(), SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, texW, texH);
 	if (!target)
+	{
+		printf("[saveToJpg] SDL_CreateTexture fallo: %s\n", SDL_GetError());
 		return false;
+	}
 
 	// set the target texture
 	SDL_SetRenderTarget(getRenderer(), target);
+	printf("[saveToJpg] render target seteado\n");
 
 	// render the texture
 	SDL_RenderCopy(getRenderer(), mTexture, NULL, NULL);
+	printf("[saveToJpg] RenderCopy hecho\n");
 
 	// reset the target texture
 	SDL_SetRenderTarget(getRenderer(), NULL);
 
 	// save the surface to the path
-	return CST_SaveJPG(target, path.c_str(), quality);
+	printf("[saveToJpg] llamando a CST_SaveJPG...\n");
+	bool ok = CST_SaveJPG(target, path.c_str(), quality);
+	printf("[saveToJpg] CST_SaveJPG devolvio %d\n", (int)ok);
+
+	// IMPORTANTE: sin esto, cada llamada a saveToJpg (una por cada
+	// instalacion de un paquete) filtraba una textura completa de GPU
+	// que nunca se liberaba.
+	SDL_DestroyTexture(target);
+
+	return ok;
 }
 
 void Texture::loadPath(std::string& path, bool forceReload) {

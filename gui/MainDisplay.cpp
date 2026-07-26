@@ -261,6 +261,96 @@ static bool isVersionNewer(const std::string& remote, const std::string& local)
 	return false; // son iguales
 }
 
+bool MainDisplay::showFullscreenPrompt(const std::string& title, const std::string& message, bool withCancel)
+{
+	CST_Color white  = { 0xFF, 0xFF, 0xFF, 0xFF };
+	CST_Color accent = { 0xFF, 0xD5, 0x4F, 0xFF }; // dorado, para que el titulo llame la atencion
+
+	bool confirmed = false;
+	bool responded = false;
+
+	DimOverlay dim;
+	// titulo grande y llamativo (bastante mas grande que el texto normal)
+	TextElement titleText(title, 42 / SCALER, &accent);
+	TextElement msgText(message, 20 / SCALER, &white, NORMAL, 700);
+
+	titleText.update();
+	msgText.update();
+
+	titleText.position(0, SCREEN_HEIGHT / 2 - 140 / SCALER);
+	msgText.position(0, SCREEN_HEIGHT / 2 - 50 / SCALER);
+
+	titleText.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	msgText.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
+	super::append(&dim);
+	super::append(&titleText);
+	super::append(&msgText);
+
+	// Botones con icono real del boton fisico (A/B), en vez de texto
+	// "[A]"/"[B]" suelto -- Button ya sabe dibujar el icono correcto segun
+	// la plataforma (ver Button::getControllerButtonImageForPlatform).
+	Button acceptBtn("Aceptar", A_BUTTON, true, 24 / SCALER, 0);
+	Button cancelBtn("Cancelar", B_BUTTON, true, 24 / SCALER, 0);
+
+	// centrar horizontalmente: si hay dos botones, uno a cada lado del centro;
+	// si es solo aviso, un unico boton centrado
+	if (withCancel)
+	{
+		int gap = 20;
+		int totalWidth = acceptBtn.width + cancelBtn.width + gap;
+		int startX = SCREEN_WIDTH / 2 - totalWidth / 2;
+		acceptBtn.position(startX, SCREEN_HEIGHT / 2 + 110 / SCALER);
+		cancelBtn.position(startX + acceptBtn.width + gap, SCREEN_HEIGHT / 2 + 110 / SCALER);
+		super::append(&cancelBtn);
+	}
+	else
+	{
+		acceptBtn.position(0, SCREEN_HEIGHT / 2 + 110 / SCALER);
+		acceptBtn.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	}
+	super::append(&acceptBtn);
+
+	while (!responded)
+	{
+		InputEvents* events = new InputEvents();
+		while (events->update())
+		{
+			if (events->pressed(A_BUTTON))
+			{
+				confirmed = true;
+				responded = true;
+				break;
+			}
+			if (withCancel && events->pressed(B_BUTTON))
+			{
+				confirmed = false;
+				responded = true;
+				break;
+			}
+			if (!withCancel && events->pressed(B_BUTTON))
+			{
+				// en un aviso informativo, B tambien cierra (igual que A)
+				confirmed = true;
+				responded = true;
+				break;
+			}
+		}
+		RootDisplay::mainDisplay->render(NULL);
+		delete events;
+		CST_Delay(16);
+	}
+
+	super::remove(&dim);
+	super::remove(&titleText);
+	super::remove(&msgText);
+	super::remove(&acceptBtn);
+	if (withCancel)
+		super::remove(&cancelBtn);
+
+	return confirmed;
+}
+
 bool MainDisplay::checkSelfUpdate()
 {
 #if !defined(SWITCH)
@@ -296,111 +386,73 @@ bool MainDisplay::checkSelfUpdate()
 	          << " (actual: " << APP_VERSION << ")" << std::endl;
 
 	// --- Dialogo de confirmacion ---
-	// Usamos una variable de sincronizacion simple porque AlertDialog
-	// funciona de forma asincrona (callbacks). Bloqueamos el loop
-	// de eventos con una flag hasta que el usuario responda.
-	bool userConfirmed = false;
-	bool userResponded = false;
-
 	std::string msg =
 		"Nueva version disponible: v" + remoteVersion + "\n"
 		"Version actual:           v" + std::string(APP_VERSION) + "\n\n"
 		"Se descargara y reemplazara el .nro en la SD.\n"
-		"Deberas reiniciar la app para aplicar la actualizacion.\n\n"
-		"[A] Actualizar    [B] Cancelar";
+		"Deberas reiniciar la app para aplicar la actualizacion.";
 
-	auto* dlg = new AlertDialog("Actualizacion disponible", msg);
-	dlg->onConfirm = [&]() {
-		userConfirmed = true;
-		userResponded = true;
-		dlg->hidden = true;
-	};
-	dlg->onCancel = [&]() {
-		userConfirmed = false;
-		userResponded = true;
-		dlg->hidden = true;
-	};
-	super::append(dlg);
-	dlg->show();
-
-	// Mini event-loop hasta que el usuario responda.
-	// NO llamamos dlg->process(events) porque chesto intenta navegar con
-	// botones fisicos dentro del dialogo y produce un crash.
-	// Manejamos A y B manualmente aqui, y el touch funciona via render+SDL.
-	while (!userResponded) {
-		InputEvents* events = new InputEvents();
-		while (events->update()) {
-			if (events->pressed(A_BUTTON)) {
-				userConfirmed = true;
-				userResponded = true;
-				dlg->hidden = true;
-				break;
-			}
-			if (events->pressed(B_BUTTON)) {
-				userConfirmed = false;
-				userResponded = true;
-				dlg->hidden = true;
-				break;
-			}
-			// touch: dejar que el dialogo lo maneje (no crashea con touch)
-			if (events->isTouch()) {
-				dlg->process(events);
-			}
-		}
-		RootDisplay::mainDisplay->render(NULL);
-		delete events;
-		CST_Delay(16);
-	}
-
-	super::remove(dlg);
-	delete dlg;
-
+	bool userConfirmed = showFullscreenPrompt("Actualizacion disponible", msg, true);
 	if (!userConfirmed)
 		return false;
 
 	// --- Descarga a archivo temporal ---
 	std::cout << "[self-update] descargando " << downloadUrl << " -> " << APP_NRO_TMP << std::endl;
 
-	// Mostrar mensaje de progreso (texto simple sobre pantalla)
-	auto* progressMsg = new TextElement(
-		"Descargando actualizacion, por favor espera...",
-		24, nullptr, NORMAL, 700
-	);
-	progressMsg->constrain(ALIGN_CENTER_BOTH);
-	super::append(progressMsg);
+	CST_Color white = { 0xFF, 0xFF, 0xFF, 0xFF };
+
+	DimOverlay downloadDim;
+	TextElement downloadStatusText("Descargando actualizacion...", 30 / SCALER, &white);
+	TextElement downloadPercentText("0%", 24 / SCALER, &white);
+	ProgressBar downloadBar;
+	downloadBar.width = 450;
+	downloadBar.percent = 0;
+	downloadBar.dimBg = false; // el dim ya lo hace downloadDim
+
+	downloadStatusText.update();
+	downloadPercentText.update();
+
+	downloadBar.position(SCREEN_WIDTH / 2 - downloadBar.width / 2, SCREEN_HEIGHT / 2);
+	downloadStatusText.position(0, SCREEN_HEIGHT / 2 - 70 / SCALER);
+	downloadPercentText.position(0, SCREEN_HEIGHT / 2 + 40 / SCALER);
+
+	downloadStatusText.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	downloadPercentText.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
+	super::append(&downloadDim);
+	super::append(&downloadStatusText);
+	super::append(&downloadBar);
+	super::append(&downloadPercentText);
 	RootDisplay::mainDisplay->render(NULL);
+
+	this->selfUpdateProgressBar = &downloadBar;
+	this->selfUpdatePercentText = &downloadPercentText;
+	networking_callback = MainDisplay::updateSelfUpdateProgress;
+	networking_callback_data = nullptr;
 
 	bool dlOk = downloadFileToDisk(downloadUrl, APP_NRO_TMP);
 
-	super::remove(progressMsg);
-	delete progressMsg;
+	networking_callback = nullptr;
+	networking_callback_data = nullptr;
+	this->selfUpdateProgressBar = nullptr;
+	this->selfUpdatePercentText = nullptr;
+
+	super::remove(&downloadDim);
+	super::remove(&downloadStatusText);
+	super::remove(&downloadBar);
+	super::remove(&downloadPercentText);
 
 	if (!dlOk) {
 		std::cout << "[self-update] fallo la descarga" << std::endl;
 		// Limpiar el .tmp si quedo a medias
 		std::remove(APP_NRO_TMP);
 
-		bool errClosed = false;
-		auto* errDlg = new AlertDialog(
+		showFullscreenPrompt(
 			"Error de descarga",
 			"No se pudo descargar la actualizacion.\n"
-			"Verifica tu conexion a internet e intenta de nuevo."
+			"Verifica tu conexion a internet e intenta de nuevo.",
+			false
 		);
-		errDlg->onConfirm = [&]() { errClosed = true; errDlg->hidden = true; };
-		super::append(errDlg);
-		errDlg->show();
-		while (!errClosed) {
-			InputEvents* ev = new InputEvents();
-			while (ev->update()) {
-				if (ev->pressed(A_BUTTON) || ev->pressed(B_BUTTON)) { errClosed = true; errDlg->hidden = true; break; }
-				errDlg->process(ev);
-			}
-			RootDisplay::mainDisplay->render(NULL);
-			delete ev;
-			CST_Delay(16);
-		}
-		super::remove(errDlg);
-		delete errDlg;
 		return false;
 	}
 
@@ -422,28 +474,13 @@ bool MainDisplay::checkSelfUpdate()
 		          << " bytes) - posible 404" << std::endl;
 		std::remove(APP_NRO_TMP);
 
-		bool errClosed = false;
-		auto* errDlg = new AlertDialog(
+		showFullscreenPrompt(
 			"Archivo invalido",
 			"El archivo descargado no es valido\n"
 			"(posiblemente el servidor devolvio un error).\n\n"
-			"Tu instalacion actual no fue modificada."
+			"Tu instalacion actual no fue modificada.",
+			false
 		);
-		errDlg->onConfirm = [&]() { errClosed = true; errDlg->hidden = true; };
-		super::append(errDlg);
-		errDlg->show();
-		while (!errClosed) {
-			InputEvents* ev = new InputEvents();
-			while (ev->update()) {
-				if (ev->pressed(A_BUTTON) || ev->pressed(B_BUTTON)) { errClosed = true; errDlg->hidden = true; break; }
-				errDlg->process(ev);
-			}
-			RootDisplay::mainDisplay->render(NULL);
-			delete ev;
-			CST_Delay(16);
-		}
-		super::remove(errDlg);
-		delete errDlg;
 		return false;
 	}
 
@@ -473,29 +510,14 @@ bool MainDisplay::checkSelfUpdate()
 			std::cout << "[self-update] magic NRO0 no encontrado en .tmp - archivo corrupto o 404" << std::endl;
 			std::remove(APP_NRO_TMP);
 
-			bool errClosed = false;
-			auto* errDlg = new AlertDialog(
+			showFullscreenPrompt(
 				"Archivo corrupto",
 				"El archivo descargado no es un NRO valido.\n"
 				"Puede que el link de descarga este desactualizado\n"
 				"o que la descarga se haya interrumpido.\n\n"
-				"Tu instalacion actual no fue modificada."
+				"Tu instalacion actual no fue modificada.",
+				false
 			);
-			errDlg->onConfirm = [&]() { errClosed = true; errDlg->hidden = true; };
-			super::append(errDlg);
-			errDlg->show();
-			while (!errClosed) {
-				InputEvents* ev = new InputEvents();
-				while (ev->update()) {
-					if (ev->pressed(A_BUTTON) || ev->pressed(B_BUTTON)) { errClosed = true; errDlg->hidden = true; break; }
-					errDlg->process(ev);
-				}
-				RootDisplay::mainDisplay->render(NULL);
-				delete ev;
-				CST_Delay(16);
-			}
-			super::remove(errDlg);
-			delete errDlg;
 			return false;
 		}
 	}
@@ -512,59 +534,25 @@ bool MainDisplay::checkSelfUpdate()
 		std::cout << "[self-update] fallo el rename de .tmp a .nro: " << strerror(errno) << std::endl;
 		std::remove(APP_NRO_TMP);
 
-		bool errClosed = false;
 		std::string renameErr =
 			std::string("No se pudo reemplazar el archivo .nro.\n") +
 			"Error: " + strerror(errno) + "\n\n" +
 			"Ruta destino: " APP_NRO_PATH "\n\n" +
 			"Tu instalacion actual no fue modificada.";
-		auto* errDlg = new AlertDialog("Error al aplicar update", renameErr);
-		errDlg->onConfirm = [&]() { errClosed = true; errDlg->hidden = true; };
-		super::append(errDlg);
-		errDlg->show();
-		while (!errClosed) {
-			InputEvents* ev = new InputEvents();
-			while (ev->update()) {
-				if (ev->pressed(A_BUTTON) || ev->pressed(B_BUTTON)) { errClosed = true; errDlg->hidden = true; break; }
-				if (ev->isTouch()) errDlg->process(ev);
-			}
-			RootDisplay::mainDisplay->render(NULL);
-			delete ev;
-			CST_Delay(16);
-		}
-		super::remove(errDlg);
-		delete errDlg;
+		showFullscreenPrompt("Error al aplicar update", renameErr, false);
 		return false;
 	}
 
 	std::cout << "[self-update] actualizacion aplicada correctamente" << std::endl;
 
 	// --- Dialogo final ---
-	bool closedDone = false;
-	auto* doneDlg = new AlertDialog(
+	showFullscreenPrompt(
 		"Actualizacion completada",
 		"v" + remoteVersion + " instalada correctamente.\n\n"
 		"Cierra la aplicacion y vuelve a abrirla\n"
-		"para usar la nueva version."
+		"para usar la nueva version.",
+		false
 	);
-	doneDlg->onConfirm = [&]() {
-		closedDone = true;
-		doneDlg->hidden = true;
-	};
-	super::append(doneDlg);
-	doneDlg->show();
-
-	while (!closedDone) {
-		InputEvents* events = new InputEvents();
-		while (events->update())
-			doneDlg->process(events);
-		RootDisplay::mainDisplay->render(NULL);
-		delete events;
-		CST_Delay(16);
-	}
-
-	super::remove(doneDlg);
-	delete doneDlg;
 
 	return true; // indica al llamador que hubo actualizacion
 }
@@ -742,6 +730,42 @@ int MainDisplay::updateLoader(void* clientp, double dlnow)
 	MainDisplay* display = (MainDisplay*)RootDisplay::mainDisplay;
 	if (display->spinner)
 		display->spinner->angle += 10;
+	display->render(NULL);
+
+	AppDetails::lastFrameTime = CST_GetTicks();
+
+	return 0;
+}
+
+int MainDisplay::updateSelfUpdateProgress(void* clientp, double dlnow)
+{
+	(void)clientp;
+	int now = CST_GetTicks();
+	int diff = now - AppDetails::lastFrameTime;
+
+	double amount = dlnow;
+	if (amount < 0) amount = 0;
+	if (amount > 1) amount = 1;
+
+	if (diff < 32 && amount != 1)
+		return 0;
+
+#if defined(SWITCH)
+	appletReportUserIsActive();
+#endif
+
+	MainDisplay* display = (MainDisplay*)RootDisplay::mainDisplay;
+	if (display->selfUpdateProgressBar)
+		display->selfUpdateProgressBar->percent = amount;
+
+	if (display->selfUpdatePercentText)
+	{
+		int percentInt = (int)(amount * 100);
+		display->selfUpdatePercentText->setText(std::to_string(percentInt) + "%");
+		display->selfUpdatePercentText->update();
+		display->selfUpdatePercentText->constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	}
+
 	display->render(NULL);
 
 	AppDetails::lastFrameTime = CST_GetTicks();

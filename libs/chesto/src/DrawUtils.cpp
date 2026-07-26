@@ -164,6 +164,7 @@ bool CST_SaveJPG(CST_Texture* texture, const char* file_name, int quality)
     SDL_SetRenderTarget(renderer, texture);
     int width, height;
     SDL_QueryTexture(texture, NULL, NULL, &width, &height);
+    printf("[CST_SaveJPG] %dx%d, calidad %d\n", width, height, quality);
     // JPG has no alpha channel, so we render into an RGB (no-alpha) surface
     SDL_Surface* surface = SDL_CreateRGBSurface(0, width, height, 24, 0, 0, 0, 0);
     if (!surface)
@@ -172,8 +173,11 @@ bool CST_SaveJPG(CST_Texture* texture, const char* file_name, int quality)
         SDL_SetRenderTarget(renderer, target);
         return false;
     }
+    printf("[CST_SaveJPG] surface creada, leyendo pixels...\n");
     SDL_RenderReadPixels(renderer, NULL, surface->format->format, surface->pixels, surface->pitch);
+    printf("[CST_SaveJPG] pixels leidos, llamando IMG_SaveJPG...\n");
     bool saved = (IMG_SaveJPG(surface, file_name, quality) == 0);
+    printf("[CST_SaveJPG] IMG_SaveJPG termino (saved=%d)\n", (int)saved);
     if (!saved)
         printf("CST_SaveJPG: IMG_SaveJPG fallo para %s: %s\n", file_name, SDL_GetError());
     SDL_FreeSurface(surface);

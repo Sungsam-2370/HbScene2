@@ -1,7 +1,9 @@
 #include "AppList.hpp"
+#include "DimOverlay.hpp"
 #include "../libs/chesto/src/RootDisplay.hpp"
 #include "../libs/chesto/src/TextElement.hpp"
 #include "../libs/chesto/src/Button.hpp"
+#include "../libs/chesto/src/ProgressBar.hpp"
 #include <unordered_map>
 
 #if defined(MUSIC)
@@ -55,6 +57,21 @@ public:
 	bool atLeastOneEnabled = false;
 
 	static int updateLoader(void* clientp, double dlnow);
+
+	// Pantalla de mensaje "estilo descarga" (fondo oscurecido de pantalla
+	// completa + texto suelto, sin caja flotante) para todo el flujo de
+	// auto-actualizacion: confirmacion, progreso, y resultado final
+	// (exito o error). Bloqueante: espera a que el usuario responda.
+	// - withCancel = true  -> muestra [A] Aceptar / [B] Cancelar, devuelve
+	//                         true solo si confirma con A.
+	// - withCancel = false -> solo aviso informativo, [A]/[B] cierran y
+	//                         siempre devuelve true.
+	bool showFullscreenPrompt(const std::string& title, const std::string& message, bool withCancel);
+
+	// callback de progreso real para la descarga del .nro de auto-actualizacion
+	static int updateSelfUpdateProgress(void* clientp, double dlnow);
+	ProgressBar* selfUpdateProgressBar = nullptr;
+	TextElement* selfUpdatePercentText = nullptr;
 
 	bool showingSplash = true;
 	bool renderedSplash = false;
