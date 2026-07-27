@@ -37,43 +37,63 @@ jobs:
         cmake --build build --parallel
         cmake --install build
     - if: matrix.platform == 'switch'
+      name: Cache de switch-mbedtls
+      id: cache-mbedtls
+      uses: actions/cache@v4
+      with:
+        path: |
+          /opt/devkitpro/portlibs/switch/lib/libmbedtls.a
+          /opt/devkitpro/portlibs/switch/lib/libmbedx509.a
+          /opt/devkitpro/portlibs/switch/lib/libmbedcrypto.a
+          /opt/devkitpro/portlibs/switch/include/mbedtls
+        key: switch-mbedtls-v1
+
+    # Este paso solo corre si el cache de arriba NO tuvo un hit, es decir,
+    # la primera vez (o si el cache se invalida/borra). Una vez que logre
+    # bajar el paquete una sola vez, las corridas siguientes usan el cache
+    # de arriba y ni siquiera intentan pegarle a pkg.devkitpro.org.
+    - if: matrix.platform == 'switch' && steps.cache-mbedtls.outputs.cache-hit != 'true'
       name: Instalar dependencias extra (mbedtls para instalacion de NSP/NSZ/XCI)
       run: |
-        # Workaround: Cloudflare esta bloqueando con 403 el trafico de pacman
-        # pensando que es trafico de bots de LLM (ver devkitPro/pacman#63).
-        # El fix sugerido por el mantenedor de devkitPro es forzar un
-        # User-Agent propio en el XferCommand de pacman.
+        # ATENCION: pkg.devkitpro.org esta devolviendo 403 en masa porque
+        # Cloudflare esta confundiendo trafico normal de pacman con bots de
+        # LLM (ver devkitPro/pacman#63, confirmado por el mantenedor
+        # WinterMute). Le pasa hasta a gente en su casa, no es cosa nuestra
+        # ni del codigo del proyecto. Probamos con curl y wget, con un
+        # User-Agent propio, alternando entre intentos, con backoff largo,
+        # por si el bloqueo es intermitente. Si sigue fallando tras todos
+        # los intentos, hay que esperar a que devkitPro lo resuelva de su
+        # lado (o conseguir el .pkg.tar.zst por otra via y cachearlo a mano,
+        # ver nota al final).
         PACCONF=/opt/devkitpro/pacman/etc/pacman.conf
-        if [ -f "$PACCONF" ]; then
-          echo "--- pacman.conf antes ---"
-          cat "$PACCONF"
-          if ! grep -q "^XferCommand" "$PACCONF"; then
-            sed -i '/^\[options\]/a XferCommand = /usr/bin/curl -A "dkp-pacman" -L -C - -f -o %o %u' "$PACCONF"
-          fi
-          echo "--- pacman.conf despues ---"
-          cat "$PACCONF"
-        else
-          echo "AVISO: no encontre $PACCONF, reviso rutas alternativas"
-          find /opt/devkitpro -iname 'pacman.conf' 2>/dev/null
+        if [ -f "$PACCONF" ] && ! grep -q "^XferCommand" "$PACCONF"; then
+          sed -i '/^\[options\]/a XferCommand = /usr/bin/curl -A "dkp-pacman" -L -C - -f -o %o %u' "$PACCONF"
         fi
 
-        # Limpiar posibles DBs corruptas de un intento previo fallido
-        rm -f /opt/devkitpro/pacman/var/lib/pacman/sync/dkp-li* \
-              /opt/devkitpro/pacman/var/lib/pacman/sync/dkp-lin* 2>/dev/null || true
+        rm -f /opt/devkitpro/pacman/var/lib/pacman/sync/dkp-li* 2>/dev/null || true
 
-        n=0
-        until [ "$n" -ge 5 ]
-        do
-          dkp-pacman --noconfirm -Sy switch-mbedtls && break
-          n=$((n+1))
-          echo "Intento $n fallo (probablemente 403 de Cloudflare), reintentando en 10s..."
-          sleep 10
+        ok=0
+        for n in 1 2 3 4 5 6 7 8; do
+          # Alternamos el XferCommand entre curl y wget en cada intento,
+          # por si uno de los dos evade el bloqueo de Cloudflare mejor.
+          if [ $((n % 2)) -eq 0 ]; then
+            sed -i "s|^XferCommand.*|XferCommand = /usr/bin/wget -U \"dkp-pacman\" --passive-ftp -c -O %o %u|" "$PACCONF"
+          else
+            sed -i "s|^XferCommand.*|XferCommand = /usr/bin/curl -A \"dkp-pacman\" -L -C - -f -o %o %u|" "$PACCONF"
+          fi
+
+          if dkp-pacman --noconfirm -Sy switch-mbedtls; then
+            ok=1
+            break
+          fi
+          echo "Intento $n/8 fallo (403 probable de Cloudflare, ver devkitPro/pacman#63), reintentando..."
+          sleep 20
         done
 
-        # Si tras los reintentos sigue sin estar instalado, que falle el job
-        # aca mismo con un mensaje claro en vez de fallar mas adelante en el
-        # link con un "cannot find -lmbedtls" confuso.
-        pacman -Q switch-mbedtls 2>/dev/null || dkp-pacman -Q switch-mbedtls
+        if [ "$ok" -ne 1 ]; then
+          echo "::error::No se pudo instalar switch-mbedtls tras 8 intentos. Esto es un problema de infraestructura de devkitPro (pkg.devkitpro.org devolviendo 403), no del codigo del proyecto. Revisa https://github.com/devkitPro/pacman/issues/63 para el estado. Como alternativa, se puede subir el .pkg.tar.zst a un release propio y extraerlo a mano en este paso."
+          exit 1
+        fi
     - name: Build ${{ matrix.platform }}
       run: |
         if [ "${{ matrix.platform }}" = "switch" ]; then
