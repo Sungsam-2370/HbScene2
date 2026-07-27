@@ -4,7 +4,6 @@
 #include <cstring>
 
 #include <switch.h>
-#include <mbedtls/bignum.h>
 
 namespace nspinstall {
 
