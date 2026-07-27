@@ -1,4 +1,4 @@
-name: Scene elf
+name: Scene Normal
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
         cmake --build build --parallel
         cmake --install build
     - if: matrix.platform == 'switch'
-      name: Instalar dependencias extra (mbedtls para auto-instalacion de NSP)
+      name: Instalar dependencias extra (mbedtls para instalacion de NSP/NSZ/XCI)
       run: |
         dkp-pacman --noconfirm -Sy switch-mbedtls
     - name: Build ${{ matrix.platform }}
@@ -50,11 +50,9 @@ jobs:
     - if: matrix.platform == 'switch'
       uses: actions/upload-artifact@v4
       with:
-        # .elf SIN stripear -- indispensable para poder correr addr2line
-        # sobre los crash logs (los offsets "scene_eshop + 0x..." no sirven
-        # de nada sin este archivo). No se puede regenerar despues: una vez
-        # que se pierde este artifact de una build especifica, ya no hay
-        # forma de resolver los crashes de ESA build en particular.
+        # .elf SIN stripear -- necesario para poder correr addr2line sobre
+        # los crash logs si algo vuelve a fallar. No se puede regenerar
+        # despues, asi que se sube ANTES del strip.
         name: scene_eshop_switch.elf
         path: scene_eshop_switch.elf
     - if: matrix.platform == 'switch'

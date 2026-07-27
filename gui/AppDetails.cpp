@@ -3,6 +3,9 @@
 
 #if defined(SWITCH)
 #include <switch.h>
+#include "../libs/get/src/nspinstall/NspAutoInstall.hpp"
+#include "../libs/get/src/nspinstall/es_ipc.h"
+#include "../libs/get/src/nspinstall/ns_ext_ipc.h"
 #endif
 
 #if defined(__WIIU__)
@@ -17,6 +20,7 @@
 
 #include "AppDetails.hpp"
 #include "AppList.hpp"
+#include "MainDisplay.hpp"
 #include "Feedback.hpp"
 #include "ThemeManager.hpp"
 #include "ProtectedCategories.hpp"
@@ -241,11 +245,19 @@ void AppDetails::proceed()
 	// if we're installing ourselves, we need to quit after on switch
 	preInstallHook();
 
+	bool wasUninstall = (this->package->getStatus() == INSTALLED);
+	bool succeeded = true;
+
 	// install or remove this package based on the package status
-	if (this->package->getStatus() == INSTALLED) {
-		get->remove(*package);
+	if (wasUninstall) {
+		succeeded = (get->remove(*package) != 0);
 	} else {
-		get->install(*package);
+		// Paso 1 (descarga) + Paso 2 (extraccion): Get::install() hace
+		// ambos, incluyendo multi-zip si el paquete lo requiere. Cada uno
+		// ya tiene su propia barra de progreso (via networking_callback +
+		// libget_status_callback, arriba).
+		succeeded = (get->install(*package) != 0);
+
 		// save the icon to the SD card, for offline use
 		if (appCard != NULL) {
 			// IMPORTANTE: el caché LOCAL del icono se guarda como PNG
@@ -260,9 +272,95 @@ void AppDetails::proceed()
 			appCard->icon.saveTo(iconSavePath);
 			//TODO: load from a cache instead!!
 		}
+
+#if defined(SWITCH)
+		// --- Paso 3: instalacion del NSP/NSZ/XCI (repo.json: "instalacion") ---
+		// Paso explicito y SEPARADO de la descarga/extraccion de arriba.
+		// Solo corre si el paso 1+2 salio bien y el paquete realmente
+		// trae la clave "instalacion" en su repo.json.
+		if (succeeded && !package->getInstallNsp().empty())
+		{
+			// pantalla propia: reusamos los mismos elementos de
+			// descarga/extraccion (misma barra, mismo estilo), solo
+			// cambiando el texto para que se note que es un paso distinto
+			downloadStatus.setText("Instalando...");
+			downloadStatus.update();
+			downloadPercent.setText("0%");
+			downloadPercent.update();
+			downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+			downloadProgress.percent = 0;
+			RootDisplay::mainDisplay->render(NULL);
+
+			// Los servicios de instalacion de titulos (spl/ncm/es/ns) se
+			// abren SOLO aca, justo antes de usarlos, y se cierran apenas
+			// terminamos -- no se mantienen abiertos toda la sesion.
+			splInitialize();
+			splCryptoInitialize();
+			ncmInitialize();
+			esInitialize();
+			nsInitialize();
+			nsextInitialize();
+
+			auto nspResult = nspinstall::InstallNspIfRequested(
+				ROOT_PATH, package->getInstallNsp(), false,
+				[](std::uint64_t done, std::uint64_t total, const std::string &) {
+					// reutiliza el mismo callback de progreso/heartbeat que
+					// ya usa la descarga -- todavia esta activo aca porque
+					// postInstallHook() (que lo limpia) corre despues
+					if (networking_callback != nullptr && total > 0)
+						networking_callback(nullptr, (double)done / (double)total);
+				});
+
+			nsextExit();
+			nsExit();
+			esExit();
+			ncmExit();
+			splCryptoExit();
+			splExit();
+
+			package->runtime_install_status = nspResult.message;
+			printf("--> Instalacion de NSP [%s]: %s\n",
+			       package->getInstallNsp().c_str(), nspResult.success ? "OK" : "FALLO");
+
+			if (!nspResult.success)
+				succeeded = false;
+		}
+#endif
 	}
 
 	postInstallHook();
+
+	// --- Paso 4: mensaje final ---
+	// Solo para instalaciones (no al desinstalar), mismo estilo que el
+	// dialogo de auto-actualizacion: fondo oscurecido + texto suelto,
+	// titulo grande, [A]/[B] para continuar.
+	if (!wasUninstall)
+	{
+		std::string title = succeeded ? "Instalacion exitosa" : "Hubo un problema";
+		std::string message;
+
+		if (succeeded)
+		{
+			message = "Descarga, extraccion";
+			if (!package->getInstallNsp().empty())
+				message += " e instalacion";
+			message += " completadas con exito.";
+
+			if (!package->runtime_install_status.empty())
+				message += "\n\n" + package->runtime_install_status;
+
+			if (!package->getInstallMessage().empty())
+				message += "\n\n" + package->getInstallMessage();
+		}
+		else
+		{
+			message = "No se pudo completar la instalacion de este paquete.";
+			if (!package->runtime_install_status.empty())
+				message += "\n\n" + package->runtime_install_status;
+		}
+
+		((MainDisplay*)RootDisplay::mainDisplay)->showFullscreenPrompt(title, message, false);
+	}
 
 	// refresh the screen
     RootDisplay::switchSubscreen(nullptr);

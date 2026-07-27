@@ -169,6 +169,19 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 		if (cur.HasMember("zip_url_4"))
 			package->zipUrl4 = cur["zip_url_4"].GetString();
 
+		// ruta del .nsp/.nsz/.xci a instalar automaticamente tras la
+		// extraccion; si no existe esta clave, install_nsp queda vacio
+		// y no se instala nada
+		if (cur.HasMember("instalacion"))
+			package->install_nsp = cur["instalacion"].GetString();
+
+		// instruccion final post-instalacion; solo se setea si el paquete
+		// realmente trae esta linea -- si no existe, queda vacio a proposito
+		if (cur.HasMember("mensaje"))
+			package->install_message = cur["mensaje"].GetString();
+		else if (cur.HasMember("message"))
+			package->install_message = cur["message"].GetString();
+
 		result.push_back(std::move(package));
 	}
 	return result;

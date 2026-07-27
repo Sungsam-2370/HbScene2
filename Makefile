@@ -20,6 +20,22 @@ ifeq (wiiu,$(MAKECMDGOALS))
 SOURCES   += libs/librpxloader/source
 INCLUDES  += ../libs/librpxloader/include
 endif
+
+# Auto-instalacion de NSP/NSZ/XCI (repo.json: "instalacion") -- solo aplica
+# a Switch, ya que depende de NCM/ES (instalacion de titulos) y de libnx.
+# mbedtls hace falta para derivar la header key de las NCA (CryptoUtils.cpp).
+# zstd viene vendorizado dentro del proyecto (no existe paquete oficial
+# "switch-zstd" en devkitPro), compilado como fuente propia.
+#
+# OJO: a diferencia de SOURCES/CFLAGS (que chesto ya exporta), LIBS no viaja
+# solo hacia el sub-make que hace el link final, asi que hay que exportarla
+# a mano o el linker nunca la va a ver.
+ifeq (switch,$(MAKECMDGOALS))
+SOURCES   += libs/get/src/nspinstall
+SOURCES   += libs/get/src/nspinstall/zstd
+LIBS      += -lmbedtls -lmbedx509 -lmbedcrypto
+export LIBS
+endif
  
 include libs/get/Makefile
 include libs/chesto/Makefile
