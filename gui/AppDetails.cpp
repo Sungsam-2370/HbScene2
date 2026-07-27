@@ -330,6 +330,14 @@ void AppDetails::proceed()
 
 	postInstallHook();
 
+	// Sacar de pantalla la barra de progreso (descarga/extraccion/instalacion)
+	// ANTES de mostrar el mensaje final -- si no, queda dibujada de fondo
+	// con su ultimo valor ("Instalando... 0%") superpuesta con el mensaje,
+	// dando la falsa impresion de que se quedo pegada.
+	super::remove(&downloadProgress);
+	super::remove(&downloadStatus);
+	super::remove(&downloadPercent);
+
 	// --- Paso 4: mensaje final ---
 	// Solo para instalaciones (no al desinstalar), mismo estilo que el
 	// dialogo de auto-actualizacion: fondo oscurecido + texto suelto,
