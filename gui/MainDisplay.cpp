@@ -336,7 +336,32 @@ bool MainDisplay::showFullscreenPrompt(const std::string& title, const std::stri
 				break;
 			}
 		}
-		RootDisplay::mainDisplay->render(NULL);
+		// IMPORTANTE: no usamos RootDisplay::mainDisplay->render(NULL) aca.
+		// Esa funcion, si hay un subscreen activo (como AppDetails, que
+		// todavia lo es en este punto -- recien se limpia despues de que
+		// esta funcion retorna), dibuja SOLO el subscreen y hace return
+		// antes de llegar a super::render(parent), que es la linea que
+		// pinta dim/titleText/msgText/botones (los hijos que agregamos
+		// arriba con super::append). Resultado: el dialogo nunca se ve,
+		// aunque los inputs se procesen bien.
+		//
+		// Por eso lo dibujamos a mano: primero lo que haya de fondo
+		// (el subscreen, o el fondo normal si no hay), y encima el
+		// dialogo, directo, sin pasar por ese atajo.
+		if (RootDisplay::subscreen)
+			RootDisplay::subscreen->render(RootDisplay::mainDisplay);
+		else
+			RootDisplay::mainDisplay->renderBackground(true);
+
+		dim.render(RootDisplay::mainDisplay);
+		titleText.render(RootDisplay::mainDisplay);
+		msgText.render(RootDisplay::mainDisplay);
+		acceptBtn.render(RootDisplay::mainDisplay);
+		if (withCancel)
+			cancelBtn.render(RootDisplay::mainDisplay);
+
+		RootDisplay::mainDisplay->update();
+
 		delete events;
 		CST_Delay(16);
 	}
