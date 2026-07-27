@@ -39,7 +39,41 @@ jobs:
     - if: matrix.platform == 'switch'
       name: Instalar dependencias extra (mbedtls para instalacion de NSP/NSZ/XCI)
       run: |
-        dkp-pacman --noconfirm -Sy switch-mbedtls
+        # Workaround: Cloudflare esta bloqueando con 403 el trafico de pacman
+        # pensando que es trafico de bots de LLM (ver devkitPro/pacman#63).
+        # El fix sugerido por el mantenedor de devkitPro es forzar un
+        # User-Agent propio en el XferCommand de pacman.
+        PACCONF=/opt/devkitpro/pacman/etc/pacman.conf
+        if [ -f "$PACCONF" ]; then
+          echo "--- pacman.conf antes ---"
+          cat "$PACCONF"
+          if ! grep -q "^XferCommand" "$PACCONF"; then
+            sed -i '/^\[options\]/a XferCommand = /usr/bin/curl -A "dkp-pacman" -L -C - -f -o %o %u' "$PACCONF"
+          fi
+          echo "--- pacman.conf despues ---"
+          cat "$PACCONF"
+        else
+          echo "AVISO: no encontre $PACCONF, reviso rutas alternativas"
+          find /opt/devkitpro -iname 'pacman.conf' 2>/dev/null
+        fi
+
+        # Limpiar posibles DBs corruptas de un intento previo fallido
+        rm -f /opt/devkitpro/pacman/var/lib/pacman/sync/dkp-li* \
+              /opt/devkitpro/pacman/var/lib/pacman/sync/dkp-lin* 2>/dev/null || true
+
+        n=0
+        until [ "$n" -ge 5 ]
+        do
+          dkp-pacman --noconfirm -Sy switch-mbedtls && break
+          n=$((n+1))
+          echo "Intento $n fallo (probablemente 403 de Cloudflare), reintentando en 10s..."
+          sleep 10
+        done
+
+        # Si tras los reintentos sigue sin estar instalado, que falle el job
+        # aca mismo con un mensaje claro en vez de fallar mas adelante en el
+        # link con un "cannot find -lmbedtls" confuso.
+        pacman -Q switch-mbedtls 2>/dev/null || dkp-pacman -Q switch-mbedtls
     - name: Build ${{ matrix.platform }}
       run: |
         if [ "${{ matrix.platform }}" = "switch" ]; then
