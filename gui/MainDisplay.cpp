@@ -323,21 +323,50 @@ bool MainDisplay::showFullscreenPrompt(const std::string& title, const std::stri
 	if (withCancel)
 		cancelBtn.action = [&wantCancel]() { wantCancel = true; };
 
+	// Dibuja un frame completo del dialogo. Separado en un lambda porque
+	// se usa tanto para el render inicial (antes del loop) como en cada
+	// vuelta del loop de espera de input.
+	auto renderPromptFrame = [&]() {
+		if (RootDisplay::subscreen)
+		{
+			// El dialogo (dim/titleText/msgText/botones) es hijo directo
+			// de MainDisplay, NO del subscreen -- por eso hay que
+			// dibujarlo aparte, encima. Ademas no podemos usar
+			// RootDisplay::mainDisplay->render(NULL) aca: esa funcion, si
+			// hay un subscreen activo (como AppDetails, que todavia lo es
+			// en este punto), dibuja SOLO el subscreen y hace return antes
+			// de llegar a la parte que pinta estos hijos. Por eso lo
+			// dibujamos a mano.
+			RootDisplay::subscreen->render(RootDisplay::mainDisplay);
+			dim.render(RootDisplay::mainDisplay);
+			titleText.render(RootDisplay::mainDisplay);
+			msgText.render(RootDisplay::mainDisplay);
+			acceptBtn.render(RootDisplay::mainDisplay);
+			if (withCancel)
+				cancelBtn.render(RootDisplay::mainDisplay);
+		}
+		else
+		{
+			// Sin subscreen activo (ej. el aviso de actualizacion al
+			// inicio, antes de que haya subscreen): el dialogo YA es
+			// hijo de MainDisplay (lo agregamos arriba con
+			// super::append), asi que un solo render "de hijos" de
+			// MainDisplay dibuja todo junto -- Sidebar/AppList de fondo,
+			// y el dialogo encima. Antes esto usaba solo
+			// renderBackground(true) (un relleno plano sin Sidebar ni
+			// AppList detras), por lo que el fondo semitransparente no
+			// tenia nada real que dejar ver y se veia como un negro
+			// solido/opaco en vez de semitransparente.
+			((Element*)RootDisplay::mainDisplay)->Element::render(NULL);
+		}
+		RootDisplay::mainDisplay->update();
+	};
+
 	// Render inicial antes de esperar input: recalcPosition() (que fija
 	// xAbs/yAbs, usados por el touch hit-test) corre dentro de render(),
 	// asi que sin este primer pase los botones tendrian coordenadas sin
 	// calcular en el primerisimo frame.
-	if (RootDisplay::subscreen)
-		RootDisplay::subscreen->render(RootDisplay::mainDisplay);
-	else
-		RootDisplay::mainDisplay->renderBackground(true);
-	dim.render(RootDisplay::mainDisplay);
-	titleText.render(RootDisplay::mainDisplay);
-	msgText.render(RootDisplay::mainDisplay);
-	acceptBtn.render(RootDisplay::mainDisplay);
-	if (withCancel)
-		cancelBtn.render(RootDisplay::mainDisplay);
-	RootDisplay::mainDisplay->update();
+	renderPromptFrame();
 
 	// Vaciar cualquier evento de SDL que haya quedado en cola durante la
 	// descarga/extraccion/instalacion (que corren sin procesar inputs; si
@@ -379,31 +408,8 @@ bool MainDisplay::showFullscreenPrompt(const std::string& title, const std::stri
 				break;
 			}
 		}
-		// IMPORTANTE: no usamos RootDisplay::mainDisplay->render(NULL) aca.
-		// Esa funcion, si hay un subscreen activo (como AppDetails, que
-		// todavia lo es en este punto -- recien se limpia despues de que
-		// esta funcion retorna), dibuja SOLO el subscreen y hace return
-		// antes de llegar a super::render(parent), que es la linea que
-		// pinta dim/titleText/msgText/botones (los hijos que agregamos
-		// arriba con super::append). Resultado: el dialogo nunca se ve,
-		// aunque los inputs se procesen bien.
-		//
-		// Por eso lo dibujamos a mano: primero lo que haya de fondo
-		// (el subscreen, o el fondo normal si no hay), y encima el
-		// dialogo, directo, sin pasar por ese atajo.
-		if (RootDisplay::subscreen)
-			RootDisplay::subscreen->render(RootDisplay::mainDisplay);
-		else
-			RootDisplay::mainDisplay->renderBackground(true);
 
-		dim.render(RootDisplay::mainDisplay);
-		titleText.render(RootDisplay::mainDisplay);
-		msgText.render(RootDisplay::mainDisplay);
-		acceptBtn.render(RootDisplay::mainDisplay);
-		if (withCancel)
-			cancelBtn.render(RootDisplay::mainDisplay);
-
-		RootDisplay::mainDisplay->update();
+		renderPromptFrame();
 
 		delete events;
 		CST_Delay(16);
