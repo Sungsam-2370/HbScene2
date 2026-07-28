@@ -311,27 +311,70 @@ bool MainDisplay::showFullscreenPrompt(const std::string& title, const std::stri
 	}
 	super::append(&acceptBtn);
 
+	// Conectamos los botones a su "action" -- Button::process() ya sabe
+	// dispararla tanto por boton fisico (A/B, via event->held(physical))
+	// como por touch/click (via Element::process() -> onTouchUp(), el
+	// mismo mecanismo que usa el resto de la app, ver Sidebar/ThemeScreen).
+	// Asi nos ahorramos reimplementar a mano la deteccion de touch, y los
+	// dos modos de entrada quedan cubiertos por el mismo camino ya probado.
+	bool wantAccept = false;
+	bool wantCancel = false;
+	acceptBtn.action = [&wantAccept]() { wantAccept = true; };
+	if (withCancel)
+		cancelBtn.action = [&wantCancel]() { wantCancel = true; };
+
+	// Render inicial antes de esperar input: recalcPosition() (que fija
+	// xAbs/yAbs, usados por el touch hit-test) corre dentro de render(),
+	// asi que sin este primer pase los botones tendrian coordenadas sin
+	// calcular en el primerisimo frame.
+	if (RootDisplay::subscreen)
+		RootDisplay::subscreen->render(RootDisplay::mainDisplay);
+	else
+		RootDisplay::mainDisplay->renderBackground(true);
+	dim.render(RootDisplay::mainDisplay);
+	titleText.render(RootDisplay::mainDisplay);
+	msgText.render(RootDisplay::mainDisplay);
+	acceptBtn.render(RootDisplay::mainDisplay);
+	if (withCancel)
+		cancelBtn.render(RootDisplay::mainDisplay);
+	RootDisplay::mainDisplay->update();
+
+	// Vaciar cualquier evento de SDL que haya quedado en cola durante la
+	// descarga/extraccion/instalacion (que corren sin procesar inputs; si
+	// tardaron varios segundos es facil que se acumulen botones sueltos,
+	// ruido del stick analogico, etc). Sin este flush, el primer boton
+	// real que aprieta el usuario en este dialogo compite contra ese
+	// backlog viejo, dando la sensacion de que hay que apretar A un par
+	// de veces para que registre.
+	{
+		InputEvents flush;
+		while (flush.update()) { /* descartar */ }
+	}
+
 	while (!responded)
 	{
 		InputEvents* events = new InputEvents();
 		while (events->update())
 		{
-			if (events->pressed(A_BUTTON))
+			// deja que Button::process maneje boton fisico + touch
+			acceptBtn.process(events);
+			if (withCancel)
+				cancelBtn.process(events);
+
+			// en un aviso informativo (sin cancelar), B tambien confirma,
+			// igual que A
+			if (!withCancel && events->pressed(B_BUTTON))
+				wantAccept = true;
+
+			if (wantAccept)
 			{
 				confirmed = true;
 				responded = true;
 				break;
 			}
-			if (withCancel && events->pressed(B_BUTTON))
+			if (withCancel && (wantCancel || events->pressed(B_BUTTON)))
 			{
 				confirmed = false;
-				responded = true;
-				break;
-			}
-			if (!withCancel && events->pressed(B_BUTTON))
-			{
-				// en un aviso informativo, B tambien cierra (igual que A)
-				confirmed = true;
 				responded = true;
 				break;
 			}

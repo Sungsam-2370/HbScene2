@@ -14,8 +14,10 @@ struct AutoInstallResult {
     std::string message; // texto listo para mostrar en el popup de resultado
 };
 
-// progreso opcional: (bytes_done, bytes_total, nombre del nca actual)
-using AutoInstallProgress = std::function<void(std::uint64_t, std::uint64_t, const std::string &)>;
+// progreso opcional: (bytes_done, bytes_total, nombre del nca actual, preparando)
+// "preparando" = true mientras se reserva espacio (CreatePlaceholder), fase
+// sin progreso incremental real disponible.
+using AutoInstallProgress = std::function<void(std::uint64_t, std::uint64_t, const std::string &, bool)>;
 
 // root_path: ej. "sdmc:/"  (ROOT_PATH de HbScene)
 // relative_nsp_path: valor tal cual viene de repo.json -> "instalacion"

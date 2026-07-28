@@ -303,10 +303,36 @@ void AppDetails::proceed()
 
 			auto nspResult = nspinstall::InstallNspIfRequested(
 				ROOT_PATH, package->getInstallNsp(), false,
-				[](std::uint64_t done, std::uint64_t total, const std::string &) {
+				[](std::uint64_t done, std::uint64_t total, const std::string &, bool preparing) {
 					// reutiliza el mismo callback de progreso/heartbeat que
 					// ya usa la descarga -- todavia esta activo aca porque
 					// postInstallHook() (que lo limpia) corre despues
+					//
+					// "preparing" = true durante CreatePlaceholder (NCM
+					// reservando de antemano el espacio del archivo). Esa
+					// reserva es una sola llamada bloqueante sin progreso
+					// real posible -- para un NCA grande puede tardar
+					// bastante, y sin este texto la barra se queda en 0%
+					// sin ninguna senal de que sigue viva. Una vez que
+					// arranca la escritura real (preparing == false),
+					// volvemos al texto normal y el % ya avanza solo.
+					auto* popup = (AppDetails*)RootDisplay::subscreen;
+					if (popup != NULL)
+					{
+						static bool wasPreparing = false;
+						if (preparing && !wasPreparing)
+						{
+							popup->downloadStatus.setText("Reservando espacio...");
+							popup->downloadStatus.update();
+						}
+						else if (!preparing && wasPreparing)
+						{
+							popup->downloadStatus.setText("Instalando...");
+							popup->downloadStatus.update();
+						}
+						wasPreparing = preparing;
+					}
+
 					if (networking_callback != nullptr && total > 0)
 						networking_callback(nullptr, (double)done / (double)total);
 				});

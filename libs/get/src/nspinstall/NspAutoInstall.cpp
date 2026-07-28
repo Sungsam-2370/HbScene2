@@ -53,7 +53,7 @@ AutoInstallResult InstallNspIfRequested(const std::string &root_path,
         full_path, config,
         [&progress](const ::nspinstall::InstallProgress &p) {
             if (progress) {
-                progress(p.bytes_done, p.bytes_total, p.current_nca);
+                progress(p.bytes_done, p.bytes_total, p.current_nca, p.preparing);
             }
         });
 

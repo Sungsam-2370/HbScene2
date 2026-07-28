@@ -15,6 +15,13 @@ struct InstallProgress {
     std::uint32_t nca_index         = 0;
     std::uint32_t nca_count         = 0;
     bool          decompressing     = false;
+    // true durante CreatePlaceholder(): NCM reserva de antemano todo el
+    // espacio del archivo antes de escribir contenido real, y esa reserva
+    // no tiene ninguna forma de reportar progreso incremental (es una sola
+    // llamada bloqueante). Para archivos grandes puede tardar bastante, y
+    // sin este aviso la UI se queda en "0%" sin ninguna señal de que sigue
+    // trabajando.
+    bool          preparing         = false;
 };
 
 using ProgressCallback = std::function<void(const InstallProgress &)>;
