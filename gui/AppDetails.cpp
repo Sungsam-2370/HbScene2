@@ -75,18 +75,17 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 
 	if (blockedByCategoryValidation && this->package->getStatus() != INSTALLED)
 	{
-		// Mismo estilo que el resto de avisos de la app (fondo
-		// semitransparente + titulo + mensaje + boton Aceptar), en vez
-		// del AlertDialog flotante que se usaba antes.
-		download.action = []() {
-			((MainDisplay*)RootDisplay::mainDisplay)->showFullscreenPrompt(
-				"Acceso restringido",
-				"Para poder descargar en esta seccion debes de usar\n"
-				"el paquete de archivos del grupo Switch Scene (PkUnico)\n\n"
-				"Consulta en el grupo para mas informacion\n\n"
-				"Las otras secciones son libres para descargar",
-				false
-			);
+		noValidationDialog = new AlertDialog(
+			"Acceso restringido",
+			"Para poder descargar en esta seccion\ndebes de usar el paquete de archivos\ndel grupo Switch Scene (PkUnico)\n\nConsulta en el grupo para mas informacion\n\nLas otras secciones son libres para \ndescargar"
+		);
+		noValidationDialog->onConfirm = [this]() {
+			noValidationDialog->hidden = true;
+		};
+		super::append(noValidationDialog);
+
+		download.action = [this]() {
+			noValidationDialog->show();
 		};
 		download.updateText("Requiere PkUnico");
 	}
@@ -104,16 +103,17 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 		           << "Consulta la fecha en el menu lateral\n"
 		           << "derecho en cada aporte";
 
-		// Mismo estilo que el resto de avisos de la app (fondo
-		// semitransparente + titulo + mensaje + boton Aceptar), en vez
-		// del AlertDialog flotante que se usaba antes.
-		std::string recentMsgStr = recentMsg.str();
-		download.action = [recentMsgStr]() {
-			((MainDisplay*)RootDisplay::mainDisplay)->showFullscreenPrompt(
-				"Aporte reciente",
-				recentMsgStr,
-				false
-			);
+		recentContentDialog = new AlertDialog(
+			"Aporte reciente",
+			recentMsg.str()
+		);
+		recentContentDialog->onConfirm = [this]() {
+			recentContentDialog->hidden = true;
+		};
+		super::append(recentContentDialog);
+
+		download.action = [this]() {
+			recentContentDialog->show();
 		};
 		download.updateText("Aporte reciente");
 	}
@@ -303,36 +303,10 @@ void AppDetails::proceed()
 
 			auto nspResult = nspinstall::InstallNspIfRequested(
 				ROOT_PATH, package->getInstallNsp(), false,
-				[](std::uint64_t done, std::uint64_t total, const std::string &, bool preparing) {
+				[](std::uint64_t done, std::uint64_t total, const std::string &) {
 					// reutiliza el mismo callback de progreso/heartbeat que
 					// ya usa la descarga -- todavia esta activo aca porque
 					// postInstallHook() (que lo limpia) corre despues
-					//
-					// "preparing" = true durante CreatePlaceholder (NCM
-					// reservando de antemano el espacio del archivo). Esa
-					// reserva es una sola llamada bloqueante sin progreso
-					// real posible -- para un NCA grande puede tardar
-					// bastante, y sin este texto la barra se queda en 0%
-					// sin ninguna senal de que sigue viva. Una vez que
-					// arranca la escritura real (preparing == false),
-					// volvemos al texto normal y el % ya avanza solo.
-					auto* popup = (AppDetails*)RootDisplay::subscreen;
-					if (popup != NULL)
-					{
-						static bool wasPreparing = false;
-						if (preparing && !wasPreparing)
-						{
-							popup->downloadStatus.setText("Reservando espacio...");
-							popup->downloadStatus.update();
-						}
-						else if (!preparing && wasPreparing)
-						{
-							popup->downloadStatus.setText("Instalando...");
-							popup->downloadStatus.update();
-						}
-						wasPreparing = preparing;
-					}
-
 					if (networking_callback != nullptr && total > 0)
 						networking_callback(nullptr, (double)done / (double)total);
 				});
@@ -633,6 +607,14 @@ void AppDetails::render(Element* parent)
 
 	// draw all elements
 	super::render(parent);
+
+	// Renderizar el dialogo de validacion AL FINAL para que quede
+	// siempre por encima del contenido y de las imagenes/descripcion
+	if (noValidationDialog)
+		noValidationDialog->render(parent);
+
+	if (recentContentDialog)
+		recentContentDialog->render(parent);
 }
 
 int AppDetails::updatePopupStatus(int status, int num, int num_total)

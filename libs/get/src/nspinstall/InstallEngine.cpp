@@ -218,12 +218,6 @@ bool StreamNcaToStorage(FILE *file, std::uint64_t offset, std::uint64_t size,
         }
     }
 
-    // Avisamos ANTES de reservar el espacio, ya que CreatePlaceholder() es
-    // una sola llamada bloqueante sin progreso incremental posible -- para
-    // un NCA grande puede tardar buena parte del tiempo total, y sin este
-    // aviso la UI se queda en "0%" sin ninguna senal de que sigue viva.
-    if(progress) progress(InstallProgress{0, nca_size, nca_name, nca_index, nca_count, false, true});
-
     if(!storage.CreatePlaceholder(nca_id, nca_size)) return false;
 
     struct PlaceholderGuard {

@@ -311,106 +311,32 @@ bool MainDisplay::showFullscreenPrompt(const std::string& title, const std::stri
 	}
 	super::append(&acceptBtn);
 
-	// Conectamos los botones a su "action" -- Button::process() ya sabe
-	// dispararla tanto por boton fisico (A/B, via event->held(physical))
-	// como por touch/click (via Element::process() -> onTouchUp(), el
-	// mismo mecanismo que usa el resto de la app, ver Sidebar/ThemeScreen).
-	// Asi nos ahorramos reimplementar a mano la deteccion de touch, y los
-	// dos modos de entrada quedan cubiertos por el mismo camino ya probado.
-	bool wantAccept = false;
-	bool wantCancel = false;
-	acceptBtn.action = [&wantAccept]() { wantAccept = true; };
-	if (withCancel)
-		cancelBtn.action = [&wantCancel]() { wantCancel = true; };
-
-	// Dibuja un frame completo del dialogo. Separado en un lambda porque
-	// se usa tanto para el render inicial (antes del loop) como en cada
-	// vuelta del loop de espera de input.
-	auto renderPromptFrame = [&]() {
-		if (RootDisplay::subscreen)
-		{
-			// El dialogo (dim/titleText/msgText/botones) es hijo directo
-			// de MainDisplay, NO del subscreen -- por eso hay que
-			// dibujarlo aparte, encima. Ademas no podemos usar
-			// RootDisplay::mainDisplay->render(NULL) aca: esa funcion, si
-			// hay un subscreen activo (como AppDetails, que todavia lo es
-			// en este punto), dibuja SOLO el subscreen y hace return antes
-			// de llegar a la parte que pinta estos hijos. Por eso lo
-			// dibujamos a mano.
-			RootDisplay::subscreen->render(RootDisplay::mainDisplay);
-			dim.render(RootDisplay::mainDisplay);
-			titleText.render(RootDisplay::mainDisplay);
-			msgText.render(RootDisplay::mainDisplay);
-			acceptBtn.render(RootDisplay::mainDisplay);
-			if (withCancel)
-				cancelBtn.render(RootDisplay::mainDisplay);
-		}
-		else
-		{
-			// Sin subscreen activo (ej. el aviso de actualizacion al
-			// inicio, antes de que haya subscreen): el dialogo YA es
-			// hijo de MainDisplay (lo agregamos arriba con
-			// super::append), asi que un solo render "de hijos" de
-			// MainDisplay dibuja todo junto -- Sidebar/AppList de fondo,
-			// y el dialogo encima. Antes esto usaba solo
-			// renderBackground(true) (un relleno plano sin Sidebar ni
-			// AppList detras), por lo que el fondo semitransparente no
-			// tenia nada real que dejar ver y se veia como un negro
-			// solido/opaco en vez de semitransparente.
-			((Element*)RootDisplay::mainDisplay)->Element::render(NULL);
-		}
-		RootDisplay::mainDisplay->update();
-	};
-
-	// Render inicial antes de esperar input: recalcPosition() (que fija
-	// xAbs/yAbs, usados por el touch hit-test) corre dentro de render(),
-	// asi que sin este primer pase los botones tendrian coordenadas sin
-	// calcular en el primerisimo frame.
-	renderPromptFrame();
-
-	// Vaciar cualquier evento de SDL que haya quedado en cola durante la
-	// descarga/extraccion/instalacion (que corren sin procesar inputs; si
-	// tardaron varios segundos es facil que se acumulen botones sueltos,
-	// ruido del stick analogico, etc). Sin este flush, el primer boton
-	// real que aprieta el usuario en este dialogo compite contra ese
-	// backlog viejo, dando la sensacion de que hay que apretar A un par
-	// de veces para que registre.
-	{
-		InputEvents flush;
-		while (flush.update()) { /* descartar */ }
-	}
-
 	while (!responded)
 	{
 		InputEvents* events = new InputEvents();
 		while (events->update())
 		{
-			// deja que Button::process maneje boton fisico + touch
-			acceptBtn.process(events);
-			if (withCancel)
-				cancelBtn.process(events);
-
-			// en un aviso informativo (sin cancelar), B tambien confirma,
-			// igual que A
-			if (!withCancel && events->pressed(B_BUTTON))
-				wantAccept = true;
-
-			if (wantAccept)
+			if (events->pressed(A_BUTTON))
 			{
 				confirmed = true;
 				responded = true;
 				break;
 			}
-			if (withCancel && (wantCancel || events->pressed(B_BUTTON)))
+			if (withCancel && events->pressed(B_BUTTON))
 			{
 				confirmed = false;
 				responded = true;
 				break;
 			}
+			if (!withCancel && events->pressed(B_BUTTON))
+			{
+				// en un aviso informativo, B tambien cierra (igual que A)
+				confirmed = true;
+				responded = true;
+				break;
+			}
 		}
-
-		renderPromptFrame();
-
+		RootDisplay::mainDisplay->render(NULL);
 		delete events;
 		CST_Delay(16);
 	}
