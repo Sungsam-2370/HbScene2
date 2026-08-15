@@ -49,6 +49,14 @@ public:
 	// mRepos_path removed: repos.json is no longer used
 	std::string mPkg_path;
 	std::string mTmp_path;
+	// carpeta de cache de iconos para la lista principal (AppCard), para
+	// paquetes instalados o NO. Deliberadamente separada de mPkg_path:
+	// LocalRepo::loadPackages() trata CUALQUIER carpeta dentro de
+	// packages/ como un paquete instalado (con solo que la carpeta
+	// exista, incluso sin info.json), asi que cachear iconos de
+	// paquetes no instalados ahi adentro los haria aparecer como
+	// instalados por error.
+	std::string mIconCache_path;
 
 	[[nodiscard]] const std::vector<std::shared_ptr<Repo>>& getRepos() const
 	{

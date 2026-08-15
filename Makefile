@@ -2,7 +2,7 @@ BINARY      := scene_eshop
  
 APP_TITLE   := Scene Eshop
 APP_AUTHOR  := Luigi Switch Scene
-APP_VERSION := 5.0.0
+APP_VERSION := 4.9.0
  
 SOURCES     += gui console
 DEBUG_BUILD := 0
@@ -23,14 +23,15 @@ endif
 
 # Auto-instalacion de NSP/NSZ/XCI (repo.json: "instalacion") -- solo aplica
 # a Switch, ya que depende de NCM/ES (instalacion de titulos) y de libnx.
+# La header key de las NCA se deriva via splCryptoGenerateAesKek/Key
+# (servicio "spl" nativo de libnx, sin dependencias externas -- mbedtls NO
+# hace falta, es un resto que ya se saco del Makefile/workflow/CryptoUtils.cpp).
 # zstd viene vendorizado dentro del proyecto (no existe paquete oficial
 # "switch-zstd" en devkitPro), compilado como fuente propia.
 #
-# NOTA: mbedtls NO hace falta -- CryptoUtils.cpp deriva la header key via
-# splCryptoGenerateAesKek/Key (servicio "spl" nativo de libnx, gratis), el
-# include de mbedtls/bignum.h que tenia era un resto sin uso real (ninguna
-# funcion de mbedtls se llegaba a invocar). Sacarlo evita depender del
-# 403 intermitente de pkg.devkitpro.org.
+# OJO: a diferencia de SOURCES/CFLAGS (que chesto ya exporta), LIBS no viaja
+# solo hacia el sub-make que hace el link final, asi que hay que exportarla
+# a mano o el linker nunca la va a ver.
 ifeq (switch,$(MAKECMDGOALS))
 SOURCES   += libs/get/src/nspinstall
 SOURCES   += libs/get/src/nspinstall/zstd

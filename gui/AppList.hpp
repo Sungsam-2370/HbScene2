@@ -70,7 +70,6 @@ private:
 	TextElement sortBlurb;
 	TextElement category;
 	Button quitBtn;
-	Button creditsBtn;
 	Button sortBtn;
 	Button keyboardBtn;
 	Button backspaceBtn;
@@ -81,7 +80,7 @@ private:
 	Button muteBtn;
 	ImageElement muteIcon;
 	ImageElement unmuteIcon;
-	Button themesBtn;
+	Button toolsBtn;
 	std::vector<std::string> musicInfo;
 #endif
 

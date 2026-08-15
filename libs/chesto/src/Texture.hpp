@@ -60,7 +60,13 @@ public:
 	Texture* setSize(int w, int h);
 
 	/// save this texture to the given file path as a PNG
-	bool saveTo(std::string& path);
+	/// Guarda esta textura como PNG en 'path'. Si maxDim > 0 y el lado mas
+	/// grande de la textura lo supera, se reescala (preservando
+	/// proporcion) para que el archivo guardado no pese mas de lo
+	/// necesario -- pensado para caches de iconos, que se muestran
+	/// siempre chicos. maxDim = 0 (default) mantiene la resolucion
+	/// original, como antes.
+	bool saveTo(std::string& path, int maxDim = 0);
 	bool saveToJpg(std::string& path, int quality = 85);
 
 	/// update and load or reload the texture

@@ -1,6 +1,17 @@
 #include "NetImageElement.hpp"
+#include <sys/stat.h>
 
-NetImageElement::NetImageElement(const char *url, std::function<Texture *(void)> getImageFallback, bool immediateLoad)
+// existe con ese nombre exacto y es un archivo (no probamos mas que eso,
+// si esta corrupto el IMG_Load de mas abajo va a fallar y seguimos con
+// la descarga por red como si no hubiera cache)
+static bool fileExistsOnDisk(const std::string& path)
+{
+	struct stat st;
+	return !path.empty() && stat(path.c_str(), &st) == 0;
+}
+
+NetImageElement::NetImageElement(const char *url, std::function<Texture *(void)> getImageFallback, bool immediateLoad, const std::string& diskCachePath)
+	: diskCachePath(diskCachePath)
 {
 	std::string key = std::string(url);
 	// printf("Key: %s\n", key.c_str());
@@ -9,6 +20,20 @@ NetImageElement::NetImageElement(const char *url, std::function<Texture *(void)>
 
 		// if we're using the cache, we can update the size now
 		// printf("The size of the image is %d x %d\n", texW, texH);
+		width = texW;
+		height = texH;
+	}
+	else if (fileExistsOnDisk(diskCachePath) && [&]{
+		// intento cargar directo del cache en disco, sin tocar la red.
+		// Si el archivo esta corrupto/no es una imagen valida, seguimos
+		// de largo y caemos a la descarga por red como si no existiera.
+		CST_Surface *surface = IMG_Load(diskCachePath.c_str());
+		bool ok = loadFromSurfaceSaveToCache(key, surface);
+		if (surface) CST_FreeSurface(surface);
+		return ok;
+	}())
+	{
+		loaded = true;
 		width = texW;
 		height = texH;
 	}
@@ -71,6 +96,20 @@ void NetImageElement::imgDownloadComplete(DownloadOperation *download)
 			width = texW;
 			height = texH;
 		}
+
+		// guardamos una copia en disco (PNG, no JPG -- IMG_SaveJPG dio
+		// problemas reales en este proyecto, ver Texture::saveTo) para
+		// que la proxima vez que se muestre esta imagen no haga falta
+		// pedirla de nuevo por red. Si el directorio del cache no existe
+		// todavia esto simplemente falla en silencio (no es critico,
+		// solo se pierde el cacheo de esta imagen puntual).
+		//
+		// maxDim=256: el icono nunca se muestra mas grande que eso (ver
+		// AppCard, icon.resize(256, ICON_SIZE)), asi que guardar la
+		// resolucion original completa (a veces bastante mas grande)
+		// solo desperdicia espacio en la SD sin ganancia visual.
+		if (!diskCachePath.empty())
+			this->saveTo(diskCachePath, 256);
 	}
 
 	delete imgDownload;

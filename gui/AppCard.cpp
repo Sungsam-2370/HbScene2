@@ -2,12 +2,46 @@
 #include "AppList.hpp"
 #include "ThemeManager.hpp"
 #include "MainDisplay.hpp"
+#include <cctype>
 
 #if defined(WII) || defined(WII_MOCK)
 #define TEXT_SIZE 20
 #else
 #define TEXT_SIZE	13 / SCALER
 #endif
+
+// Nombre de archivo seguro para el cache: dejamos letras/numeros/./-/_ y
+// cambiamos el resto por "_", asi versiones con caracteres raros no
+// rompen el path.
+static std::string sanitizeForFilename(const std::string& s)
+{
+	std::string out;
+	out.reserve(s.size());
+	for (char c : s)
+	{
+		if (isalnum((unsigned char)c) || c == '.' || c == '-' || c == '_')
+			out += c;
+		else
+			out += '_';
+	}
+	return out;
+}
+
+// Incluimos la version del paquete en el nombre del archivo cacheado.
+// Asi, si el repo sube una version nueva (icono incluido), el nombre de
+// archivo cambia, el cache "viejo" ya no matchea, y se vuelve a
+// descargar el icono actual en vez de quedarse para siempre con el
+// primero que se vio. El archivo de la version anterior queda huerfano
+// en la SD (unos pocos KB c/u); no lo borramos automaticamente para no
+// tener que escanear todo el directorio en cada tarjeta.
+static std::string iconCachePathFor(AppList* list, Package& package)
+{
+	if (!list)
+		return std::string();
+
+	return list->get->mIconCache_path + sanitizeForFilename(package.getPackageName())
+		+ "_" + sanitizeForFilename(package.getVersion()) + ".png";
+}
 
 AppCard::AppCard(Package& package, AppList* list)
 	: package(new Package(package))
@@ -26,7 +60,7 @@ AppCard::AppCard(Package& package, AppList* list)
 		}
 
 		return new ImageElement(RAMFS "res/default.png");
-	}, !list)
+	}, !list, iconCachePathFor(list, package))
 	, version(("v" + package.getVersion()).c_str(), TEXT_SIZE, &HBAS::ThemeManager::textSecondary)
 	, status(package.statusStringDisplay(), TEXT_SIZE, &HBAS::ThemeManager::textSecondary)
 	, appname(package.getTitle().c_str(), TEXT_SIZE + 3, &HBAS::ThemeManager::textCard)

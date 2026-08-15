@@ -2,7 +2,7 @@
 #include "AboutScreen.hpp"
 #include "FeedbackCenter.hpp"
 #include "ThemeManager.hpp"
-#include "ThemeScreen.hpp"
+#include "ToolsScreen.hpp"
 #include "main.hpp"
 
 #include "../libs/get/src/Utils.hpp"
@@ -36,7 +36,6 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	: get(get)			// the main get instance that contains repo info and stuff
 	, sidebar(sidebar)	// the sidebar, which will store the currently selected category info
 	, quitBtn(i18n("listing.quit"), SELECT_BUTTON, false, 15)
-	, creditsBtn(i18n("listing.credits"), START_BUTTON, false, 15)
 	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, 15)
 	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, 15)
 	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, 15)
@@ -47,7 +46,7 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	, muteIcon(RAMFS "res/mute.png")
 	, unmuteIcon(RAMFS "res/unmute.png")
 #endif
-	, themesBtn("Temas", R_BUTTON, false, 15)
+	, toolsBtn("Herramientas", R_BUTTON, false, 15)
 {
 	this->x = 400/SCALER - 260/SCALER * hideSidebar;
 	sidebar->width = this->x - 35/SCALER; // width of the sidebar is space between edge and applist
@@ -64,15 +63,15 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	};
 
 	// additional buttons
-	creditsBtn.action = std::bind(&AppList::launchSettings, this, false);
 	sortBtn.action = std::bind(&AppList::cycleSort, this);
 
-	// Abre la pantalla de temas. El boton fisico R tambien se maneja en
+	// Abre el menu de Herramientas (Temas / Creditos / Limpieza de
+	// cache). El boton fisico R tambien se maneja en
 	// MainDisplay::process; el guard de subscreen evita abrir dos veces
 	// si ambos detectan la pulsacion en el mismo frame.
-	themesBtn.action = []() {
+	toolsBtn.action = [this]() {
 		if (!RootDisplay::subscreen)
-			RootDisplay::switchSubscreen(new ThemeScreen());
+			RootDisplay::switchSubscreen(new ToolsScreen(this->get));
 	};
 	
 #if defined(MUSIC)
@@ -502,9 +501,7 @@ void AppList::update()
 	else
 	{
 		// add additional buttons
-		creditsBtn.position(quitBtn.x - 20 - creditsBtn.width, quitBtn.y);
-		super::append(&creditsBtn);
-		sortBtn.position(creditsBtn.x - 20 - sortBtn.width, quitBtn.y);
+		sortBtn.position(quitBtn.x - 20 - sortBtn.width, quitBtn.y);
 		super::append(&sortBtn);
 	
 
@@ -519,18 +516,18 @@ void AppList::update()
 			unmuteIcon.position(sortBtn.x - 35 - muteIcon.width, quitBtn.y + 5);
 			Mix_PausedMusic() ? super::append(&muteIcon) : super::append(&unmuteIcon);
 
-			// boton de temas, a la izquierda del boton de musica
-			themesBtn.position(muteBtn.x - 20 - themesBtn.width, quitBtn.y);
-			super::append(&themesBtn);
+			// boton de herramientas, a la izquierda del boton de musica
+			toolsBtn.position(muteBtn.x - 20 - toolsBtn.width, quitBtn.y);
+			super::append(&toolsBtn);
 		} else {
-			// sin musica cargada: el boton de temas va junto al de ordenar
-			themesBtn.position(sortBtn.x - 20 - themesBtn.width, quitBtn.y);
-			super::append(&themesBtn);
+			// sin musica cargada: el boton de herramientas va junto al de ordenar
+			toolsBtn.position(sortBtn.x - 20 - toolsBtn.width, quitBtn.y);
+			super::append(&toolsBtn);
 		}
 #else
-		// build sin soporte de musica: el boton de temas va junto al de ordenar
-		themesBtn.position(sortBtn.x - 20 - themesBtn.width, quitBtn.y);
-		super::append(&themesBtn);
+		// build sin soporte de musica: el boton de herramientas va junto al de ordenar
+		toolsBtn.position(sortBtn.x - 20 - toolsBtn.width, quitBtn.y);
+		super::append(&toolsBtn);
 #endif
 
 		// category text

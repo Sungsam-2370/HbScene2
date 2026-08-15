@@ -58,10 +58,12 @@ Get::Get(
 
 	mPkg_path = std::string(config_path + "packages/");
 	mTmp_path = std::string(config_path + "tmp/");
+	mIconCache_path = std::string(config_path + "icon_cache/");
 
 	my_mkdir(config_dir.data());
 	my_mkdir(mPkg_path.c_str());
 	my_mkdir(mTmp_path.c_str());
+	my_mkdir(mIconCache_path.c_str());
 
 	this->loadRepos();
 

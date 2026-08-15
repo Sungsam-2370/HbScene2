@@ -231,13 +231,37 @@ void Texture::getTextureSize(int *w, int *h)
 		*h = texH;
 }
 
-bool Texture::saveTo(std::string &path)
+bool Texture::saveTo(std::string &path, int maxDim)
 {
 	if (!mTexture)
 		return false;
 
+	// si maxDim esta seteado y la textura lo supera, calculamos un
+	// tamaño de salida mas chico preservando la proporcion. El icono
+	// nunca se muestra mas grande que el tamaño de la tarjeta, asi que
+	// guardar la resolucion original completa solo desperdicia espacio
+	// en la SD sin ninguna ganancia visual.
+	int outW = texW, outH = texH;
+	if (maxDim > 0 && (texW > maxDim || texH > maxDim))
+	{
+		if (texW >= texH)
+		{
+			outW = maxDim;
+			outH = (texH * maxDim) / texW;
+		}
+		else
+		{
+			outH = maxDim;
+			outW = (texW * maxDim) / texH;
+		}
+		if (outW < 1) outW = 1;
+		if (outH < 1) outH = 1;
+	}
+
 	// render the texture to one that can be saved (TARGET ACCESS)
-	CST_Texture* target = SDL_CreateTexture(getRenderer(), SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, texW, texH);
+	// -- si outW/outH son mas chicos que texW/texH, SDL_RenderCopy de
+	// abajo escala automaticamente al copiar a un target mas chico.
+	CST_Texture* target = SDL_CreateTexture(getRenderer(), SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, outW, outH);
 	if (!target)
 		return false;
 	
