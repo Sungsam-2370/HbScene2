@@ -35,18 +35,18 @@ CST_Color AppList::lighterRed = { 0xef, 0x48, 0x48, 0xff };
 AppList::AppList(Get* get, Sidebar* sidebar)
 	: get(get)			// the main get instance that contains repo info and stuff
 	, sidebar(sidebar)	// the sidebar, which will store the currently selected category info
-	, quitBtn(i18n("listing.quit"), SELECT_BUTTON, false, 12)
-	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, 12)
-	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, 12)
-	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, 12)
+	, quitBtn(i18n("listing.quit"), SELECT_BUTTON, false, 13, 0, 1.8f)
+	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, 13, 0, 1.8f)
+	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, 13, 0, 1.8f)
+	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, 13, 0, 1.8f)
 	, nowPlayingText(" ", 16, &HBAS::ThemeManager::textPrimary)
 #if defined(MUSIC)
 	, nowPlayingIcon(RAMFS "res/nowplaying.png")
-	, muteBtn(" ", X_BUTTON, false, 12, 70)
+	, muteBtn(" ", X_BUTTON, false, 13, 100, 1.8f)
 	, muteIcon(RAMFS "res/mute.png")
 	, unmuteIcon(RAMFS "res/unmute.png")
 #endif
-	, toolsBtn("Herramientas", R_BUTTON, false, 12)
+	, toolsBtn("Herramientas", R_BUTTON, false, 13, 0, 1.8f)
 {
 	this->x = 400/SCALER - 260/SCALER * hideSidebar;
 	sidebar->width = this->x - 35/SCALER; // width of the sidebar is space between edge and applist
@@ -96,8 +96,8 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	
 #if defined(MUSIC)
 	muteBtn.action = std::bind(&AppList::toggleAudio, this);
-	muteIcon.resize(32, 32);
-	unmuteIcon.resize(32, 32);
+	muteIcon.resize(38, 38);
+	unmuteIcon.resize(38, 38);
 	nowPlayingIcon.resize(26, 26);
 #endif
 
@@ -341,6 +341,11 @@ void AppList::render(Element* parent)
 	if (this->parent == NULL)
 		this->parent = parent;
 
+	// necesario para que this->xAbs/yAbs esten al dia (antes lo hacia
+	// super::render() por nosotros); los hijos lo usan como base para
+	// calcular su propia posicion en pantalla
+	this->recalcPosition(parent);
+
 	// draw a white background, screen dims wide
 	CST_Rect dimens = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 	dimens.x = this->x - 35;
@@ -350,20 +355,36 @@ void AppList::render(Element* parent)
     CST_FillRect(RootDisplay::renderer, &dimens);
   }
 
-#if !defined(_3DS) && !defined(_3DS_MOCK)
+#if defined(_3DS) || defined(_3DS_MOCK)
+	// 3DS no tiene sidebar ni franja inferior: se renderiza todo en un
+	// solo pase, igual que antes (recalcPosition ya se hizo mas arriba)
+	for (Element* subelement : elements)
+		subelement->render(this);
+#else
+	// Las tarjetas (todo lo que NO es "chrome" fijo: botones/titulo) se
+	// recortan para que nunca dibujen encima de la franja inferior al
+	// scrollear. El chrome se renderiza aparte, despues, sin recorte y
+	// por encima de la franja - por eso nunca queda tapado.
+	CST_Rect clip = { dimens.x, 0, SCREEN_WIDTH - dimens.x, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT };
+	SDL_RenderSetClipRect(RootDisplay::renderer, &clip);
+	for (Element* subelement : elements)
+		if (!subelement->isAbsolute)
+			subelement->render(this);
+	SDL_RenderSetClipRect(RootDisplay::renderer, NULL);
+
 	// Porcion derecha de la franja inferior compartida (de aqui hasta el
 	// borde de la pantalla). Sidebar dibuja la porcion izquierda con el
 	// mismo color y alto (SIDEBAR_FOOTER_HEIGHT); juntas cruzan toda la
 	// pantalla sin importar si el menu lateral esta contraido o no.
-	// Se dibuja antes de los hijos para que los botones (isAbsolute,
-	// posicionados dentro de esta franja) queden encima, en el mismo
-	// pase que ya los renderiza a ellos y a las tarjetas.
 	CST_Rect footerRect = { dimens.x, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT, SCREEN_WIDTH - dimens.x, SIDEBAR_FOOTER_HEIGHT };
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarFooterBg);
 	CST_FillRect(RootDisplay::renderer, &footerRect);
-#endif
 
-	super::render(parent);
+	// chrome (titulo arriba + botones abajo): siempre visible, encima de todo
+	for (Element* subelement : elements)
+		if (subelement->isAbsolute)
+			subelement->render(this);
+#endif
 }
 
 bool AppList::sortCompare(const Package& left, const Package& right)
@@ -596,15 +617,15 @@ void AppList::update()
 
 void AppList::positionChrome()
 {
-#if defined(_3DS) || defined(_3DS_MOCK)
-	return; // 3DS no tiene sidebar ni franja inferior
-#else
 	// --- Titulo de la seccion: arriba, fijo, no scrollea con las tarjetas ---
 	const int titleX = this->x + 20/SCALER;
 	const int titleY = 40/SCALER;
 	category.position(titleX, titleY);
 	sortBlurb.position(category.x + category.width + 15/SCALER, category.y + 12/SCALER);
 
+#if defined(_3DS) || defined(_3DS_MOCK)
+	return; // 3DS no tiene sidebar ni franja inferior (quitBtn ya se posiciono aparte)
+#else
 	// --- Botones de accion: abajo, en la franja compartida con Sidebar ---
 	const int footerY = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT / 2 - quitBtn.height / 2;
 	const int gap = 10/SCALER;
@@ -634,9 +655,14 @@ void AppList::positionChrome()
 #if defined(MUSIC)
 		if (RootDisplay::mainDisplay->music) {
 			muteBtn.position(nextX, footerY);
-			muteIcon.position(muteBtn.x + muteBtn.width + gap, footerY + (muteBtn.height - muteIcon.height) / 2);
-			unmuteIcon.position(muteIcon.x, muteIcon.y);
-			nextX = muteIcon.x + muteIcon.width + gap;
+			// el icono de musica (altavoz) va DENTRO del boton, alineado a
+			// su derecha, junto al icono del boton fisico (que queda a la
+			// izquierda) - asi no queda "flotando" fuera del recuadro
+			int iconY = muteBtn.y + (muteBtn.height - muteIcon.height) / 2;
+			int iconX = muteBtn.x + muteBtn.width - muteIcon.width - 10/SCALER;
+			muteIcon.position(iconX, iconY);
+			unmuteIcon.position(iconX, iconY);
+			nextX = muteBtn.x + muteBtn.width + gap;
 		}
 #endif
 	}

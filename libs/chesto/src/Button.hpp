@@ -6,7 +6,7 @@
 class Button : public Element
 {
 public:
-	Button(std::string text, int button, bool dark = false, int size = 20, int width = 0);
+	Button(std::string text, int button, bool dark = false, int size = 20, int width = 0, float iconScale = 1.5f);
 
 	void render(Element* parent);
 	bool process(InputEvents* event);
@@ -32,6 +32,11 @@ private:
 	int physical = -1;
 
 	ImageElement icon;
+
+	// que tan grande es el icono del boton fisico respecto al alto del
+	// texto (1.5 = tamano original). Permite agrandar el icono solo en
+	// botones puntuales sin afectar al resto de la app.
+	float iconScale = 1.5f;
 
 	bool shouldRenderGlossy();
 };

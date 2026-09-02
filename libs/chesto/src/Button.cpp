@@ -6,11 +6,12 @@ CST_Color Button::colors[2] = {
 	{ 0xff, 0xff, 0xff, 0xff }, // dark
 };
 
-Button::Button(std::string message, int button, bool dark, int size, int width)
+Button::Button(std::string message, int button, bool dark, int size, int width, float iconScale)
 	: physical(button)
 	, dark(dark)
 	, icon(getControllerButtonImageForPlatform(button, !dark, false))
 	, text(message, (size / SCALER), &colors[dark])
+	, iconScale(iconScale)
 {
 
 	super::append(&text);
@@ -19,7 +20,7 @@ Button::Button(std::string message, int button, bool dark, int size, int width)
 	// on initialization, store the last gamepad info
 	myLastSeenGamepad = "";
 
-	icon.resize(text.height*1.5, text.height*1.5);
+	icon.resize(text.height*iconScale, text.height*iconScale);
 	
 	if (shouldRenderGlossy()) {
 		icon.hide();
@@ -186,7 +187,7 @@ bool Button::process(InputEvents* event)
 			icon.unhide();
 			hasBackground = true;
 			icon.loadPath(newPath);
-			icon.resize(text.height*1.5, text.height*1.5);
+			icon.resize(text.height*iconScale, text.height*iconScale);
 		}
 		myLastSeenGamepad = InputEvents::lastGamepadKey;
 	}
