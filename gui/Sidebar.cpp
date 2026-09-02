@@ -135,10 +135,9 @@ void Sidebar::addHints()
 		super::append(hint);
 	}
 
-	// Position both elements at the bottom of the sidebar.
-	// Use fixed coordinates: icon on the left, text to its right.
-	const int hintAreaHeight = 55/SCALER;
-	const int bottomY = SCREEN_HEIGHT - hintAreaHeight + 17/SCALER;
+	// Position both elements at the bottom of the sidebar, vertically
+	// centered within la franja inferior (ahora mas alta que antes).
+	const int bottomY = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT / 2 - hint->height / 2;
 	// Center the icon and text horizontally in the sidebar
 	const int totalWidth = hider->width + 5/SCALER + hint->width;
 	const int iconX = (width - totalWidth) / 2;
@@ -150,6 +149,27 @@ void Sidebar::addHints()
 	hint->unhide();
 
 	showCurrentCategory = true;
+}
+
+void Sidebar::setCollapsed(bool collapsed)
+{
+	if (hider == nullptr || hint == nullptr)
+		return;
+
+	if (collapsed)
+	{
+		// el texto no entra en el ancho angosto del menu contraido: se oculta,
+		// pero el icono se mantiene siempre visible y centrado
+		hint->hide();
+		hider->unhide();
+		const int bottomY = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT / 2 - hider->height / 2;
+		hider->position((width - hider->width) / 2, bottomY);
+	}
+	else
+	{
+		// vuelve a acomodar icono + texto lado a lado
+		addHints();
+	}
 }
 
 bool Sidebar::process(InputEvents* event)
@@ -279,8 +299,7 @@ void Sidebar::render(Element* parent)
 #endif
 	// The Y where the category list begins (below the logo/title area)
 	const int catAreaTop = 130/SCALER;
-	const int hintAreaHeightForSections = 55/SCALER;
-	const int footerTopY = SCREEN_HEIGHT - hintAreaHeightForSections;
+	const int footerTopY = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT;
 
 	// --- Dibujar las 3 secciones del sidebar con sus colores independientes ---
 	// Seccion superior: titulo/logo (0 hasta donde empiezan las categorias)
@@ -293,14 +312,16 @@ void Sidebar::render(Element* parent)
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarCategoryBg);
 	CST_FillRect(RootDisplay::renderer, &categorySectionRect);
 
-	// Seccion inferior: boton de expandir/contraer
-	CST_Rect footerSectionRect = { 0, footerTopY, width, hintAreaHeightForSections };
+	// Seccion inferior: parte izquierda de la franja de botones compartida.
+	// AppList dibuja la porcion derecha (de aqui hasta SCREEN_WIDTH) con el
+	// mismo color y la misma altura, asi que juntas forman una sola barra
+	// que cruza toda la pantalla y no se contrae con el resto del menu.
+	CST_Rect footerSectionRect = { 0, footerTopY, width, SIDEBAR_FOOTER_HEIGHT };
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarFooterBg);
 	CST_FillRect(RootDisplay::renderer, &footerSectionRect);
 
 	// --- Clip drawing to the category area so items don't overdraw the logo/title ---
-	const int hintAreaHeight = 55/SCALER;
-	CST_Rect clipRect = { 0, catAreaTop, width, SCREEN_HEIGHT - catAreaTop - hintAreaHeight };
+	CST_Rect clipRect = { 0, catAreaTop, width, footerTopY - catAreaTop };
 	SDL_RenderSetClipRect(RootDisplay::renderer, &clipRect);
 
 	// draw the background-colored rect behind the active category
@@ -408,8 +429,7 @@ void Sidebar::updateCategoryScroll()
 	// screen height for the platform (720 on Switch, adjustable via SCREEN_HEIGHT)
 	// Leave room for logo area at top (150px) and some bottom padding (30px)
 	const int visibleStart = 150/SCALER;
-	const int hintAreaHeight = 55/SCALER;
-	const int visibleEnd   = SCREEN_HEIGHT - hintAreaHeight;
+	const int visibleEnd   = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT;
 	const int itemHeight   = 70/SCALER;
 
 	// Y position of the highlighted item (before scroll offset)

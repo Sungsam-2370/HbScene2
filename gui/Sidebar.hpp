@@ -13,6 +13,12 @@ class AppList;
 #else
 #define TOTAL_CATS 10
 #endif
+
+// altura de la franja inferior compartida (indicador L + botones de accion).
+// Sidebar dibuja su propia porcion (0..width) y AppList dibuja el resto
+// (width..SCREEN_WIDTH) usando la misma altura y color, para que ambas
+// mitades formen una sola barra continua que cruza toda la pantalla.
+#define SIDEBAR_FOOTER_HEIGHT (90/SCALER)
 #pragma once
 
 class Sidebar : public ListElement
@@ -26,6 +32,12 @@ public:
 
 	void addHints();
 	void updateCategoryScroll();
+
+	// Llamado por AppList cuando el usuario contrae/expande el menu (L/ZL).
+	// El indicador de la franja inferior (icono + texto) ya NO se oculta por
+	// completo: cuando se contrae, se conserva el icono (centrado en el
+	// ancho angosto) y solo se retira el texto, que ya no entraria.
+	void setCollapsed(bool collapsed);
 
 	std::string searchQuery = "";
 

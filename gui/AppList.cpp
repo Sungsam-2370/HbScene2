@@ -35,24 +35,44 @@ CST_Color AppList::lighterRed = { 0xef, 0x48, 0x48, 0xff };
 AppList::AppList(Get* get, Sidebar* sidebar)
 	: get(get)			// the main get instance that contains repo info and stuff
 	, sidebar(sidebar)	// the sidebar, which will store the currently selected category info
-	, quitBtn(i18n("listing.quit"), SELECT_BUTTON, false, 15)
-	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, 15)
-	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, 15)
-	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, 15)
-	, nowPlayingText(" ", 20, &HBAS::ThemeManager::textPrimary)
+	, quitBtn(i18n("listing.quit"), SELECT_BUTTON, false, 12)
+	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, 12)
+	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, 12)
+	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, 12)
+	, nowPlayingText(" ", 16, &HBAS::ThemeManager::textPrimary)
 #if defined(MUSIC)
 	, nowPlayingIcon(RAMFS "res/nowplaying.png")
-	, muteBtn(" ", X_BUTTON, false, 15, 90)
+	, muteBtn(" ", X_BUTTON, false, 12, 70)
 	, muteIcon(RAMFS "res/mute.png")
 	, unmuteIcon(RAMFS "res/unmute.png")
 #endif
-	, toolsBtn("Herramientas", R_BUTTON, false, 15)
+	, toolsBtn("Herramientas", R_BUTTON, false, 12)
 {
 	this->x = 400/SCALER - 260/SCALER * hideSidebar;
 	sidebar->width = this->x - 35/SCALER; // width of the sidebar is space between edge and applist
 
 	// the offset of how far along scroll'd we are
 	this->y = 0;
+
+	// El titulo de la seccion y todos los botones de accion viven fuera del
+	// flujo scrolleable: se marcan isAbsolute para que su posicion en
+	// pantalla (xAbs/yAbs) se tome directo de su x/y, sin sumar el offset
+	// de scroll de esta lista (this->y). Asi el titulo y los botones ya no
+	// se mueven cuando se scrollean las tarjetas.
+	category.isAbsolute = true;
+	sortBlurb.isAbsolute = true;
+	quitBtn.isAbsolute = true;
+	sortBtn.isAbsolute = true;
+	keyboardBtn.isAbsolute = true;
+	backspaceBtn.isAbsolute = true;
+	nowPlayingText.isAbsolute = true;
+	toolsBtn.isAbsolute = true;
+#if defined(MUSIC)
+	nowPlayingIcon.isAbsolute = true;
+	muteBtn.isAbsolute = true;
+	muteIcon.isAbsolute = true;
+	unmuteIcon.isAbsolute = true;
+#endif
 
 	// initialize random numbers used for sorting
 	std::srand(unsigned(std::time(0)));
@@ -148,14 +168,10 @@ bool AppList::process(InputEvents* event)
 		this->x = 400/SCALER - 260/SCALER * hideSidebar;
 		sidebar->width = this->x - 35/SCALER; // width of the sidebar is space between edge and applist
 
-		if (hideSidebar) {
-			// Sidebar collapsed: hide the hint elements
-			if (sidebar->hider) sidebar->hider->hide();
-			if (sidebar->hint)  sidebar->hint->hide();
-		} else {
-			// Sidebar expanded: reposition and show hint elements
-			sidebar->addHints();
-		}
+		// El indicador L de la franja inferior ya no desaparece por
+		// completo: Sidebar::setCollapsed() se encarga de dejar el icono
+		// visible (contraido o no) y de mostrar/ocultar solo el texto.
+		sidebar->setCollapsed(hideSidebar);
 
 		update();
 		return true;
@@ -334,6 +350,19 @@ void AppList::render(Element* parent)
     CST_FillRect(RootDisplay::renderer, &dimens);
   }
 
+#if !defined(_3DS) && !defined(_3DS_MOCK)
+	// Porcion derecha de la franja inferior compartida (de aqui hasta el
+	// borde de la pantalla). Sidebar dibuja la porcion izquierda con el
+	// mismo color y alto (SIDEBAR_FOOTER_HEIGHT); juntas cruzan toda la
+	// pantalla sin importar si el menu lateral esta contraido o no.
+	// Se dibuja antes de los hijos para que los botones (isAbsolute,
+	// posicionados dentro de esta franja) queden encima, en el mismo
+	// pase que ya los renderiza a ellos y a las tarjetas.
+	CST_Rect footerRect = { dimens.x, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT, SCREEN_WIDTH - dimens.x, SIDEBAR_FOOTER_HEIGHT };
+	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarFooterBg);
+	CST_FillRect(RootDisplay::renderer, &footerRect);
+#endif
+
 	super::render(parent);
 }
 
@@ -472,10 +501,8 @@ void AppList::update()
 	totalCount = appCards.size();
 
 	// add quit button
-	quitBtn.position(SCREEN_HEIGHT/SCALER + 260 * hideSidebar, 40);
-
 #if defined(_3DS) || defined(_3DS_MOCK)
-  	quitBtn.position(SCREEN_WIDTH - quitBtn.width - 5, 20);
+	quitBtn.position(SCREEN_WIDTH - quitBtn.width - 5, 20);
 #else
 	super::append(&quitBtn);
 #endif
@@ -484,70 +511,49 @@ void AppList::update()
 	if (sidebar->searchModeActive)
 	{
 		// add the keyboard
-		keyboardBtn.position(quitBtn.x - 20 - keyboardBtn.width, quitBtn.y);
 		super::append(&keyboardBtn);
 		keyboard.position(372 + (3 - R) * 132, 417);
 		super::append(&keyboard);
 
-		// category text
-		category.position(20, 90);
+		// category text (busqueda activa)
 		category.setText(std::string(i18n("listing.search") + " \"") + sidebar->searchQuery + "\"");
 		category.update();
 		super::append(&category);
 
-		backspaceBtn.position(keyboardBtn.x - 20 - backspaceBtn.width, quitBtn.y);
 		super::append(&backspaceBtn);
 	}
 	else
 	{
 		// add additional buttons
-		sortBtn.position(quitBtn.x - 20 - sortBtn.width, quitBtn.y);
 		super::append(&sortBtn);
-	
 
 #if defined(MUSIC)
 		auto rootDisplay = RootDisplay::mainDisplay;
 
 		if (rootDisplay->music) {
-			muteBtn.position(sortBtn.x - 20 - muteBtn.width, quitBtn.y);
 			super::append(&muteBtn);
-			// reposition quit now that mute button is there
-			muteIcon.position(sortBtn.x - 35 - muteIcon.width, quitBtn.y + 5);
-			unmuteIcon.position(sortBtn.x - 35 - muteIcon.width, quitBtn.y + 5);
 			Mix_PausedMusic() ? super::append(&muteIcon) : super::append(&unmuteIcon);
-
-			// boton de herramientas, a la izquierda del boton de musica
-			toolsBtn.position(muteBtn.x - 20 - toolsBtn.width, quitBtn.y);
 			super::append(&toolsBtn);
 		} else {
-			// sin musica cargada: el boton de herramientas va junto al de ordenar
-			toolsBtn.position(sortBtn.x - 20 - toolsBtn.width, quitBtn.y);
 			super::append(&toolsBtn);
 		}
 #else
-		// build sin soporte de musica: el boton de herramientas va junto al de ordenar
-		toolsBtn.position(sortBtn.x - 20 - toolsBtn.width, quitBtn.y);
 		super::append(&toolsBtn);
 #endif
 
 		// category text
-		category.position(20, 90);
 		category.setText(sidebar->currentCatName());
 		category.update();
 		super::append(&category);
 
 		// add the search type next to the category in a gray font
-		sortBlurb.position(category.x + category.width + 15, category.y + 12);
 		sortBlurb.setText(i18n(sortingDescriptions[sortMode]).c_str());
 		sortBlurb.update();
 		super::append(&sortBlurb);
-
 	}
 
-	nowPlayingText.position((quitBtn.width + quitBtn.x) - nowPlayingText.width, 20);
-
 	auto rootDisplay = RootDisplay::mainDisplay;
-	
+
 #if defined(MUSIC)
 	if (rootDisplay->music) {
 		if (!Mix_PausedMusic()) {
@@ -575,14 +581,73 @@ void AppList::update()
 	}
 
 	nowPlayingText.update();
-	nowPlayingText.position((quitBtn.width + quitBtn.x) - nowPlayingText.width, 20); // TODO: copypasta position
-	nowPlayingIcon.position(nowPlayingText.x - 30, 20);
 
 	// now playing text (or applet warning)
 	super::append(&nowPlayingText);
 #endif
 
+	// Con todos los botones/elementos ya agregados y con su texto final
+	// (el ancho del texto puede haber cambiado), se calculan sus posiciones
+	// definitivas: titulo arriba fijo, botones abajo en la franja compartida.
+	positionChrome();
+
 	needsUpdate = false;
+}
+
+void AppList::positionChrome()
+{
+#if defined(_3DS) || defined(_3DS_MOCK)
+	return; // 3DS no tiene sidebar ni franja inferior
+#else
+	// --- Titulo de la seccion: arriba, fijo, no scrollea con las tarjetas ---
+	const int titleX = this->x + 20/SCALER;
+	const int titleY = 40/SCALER;
+	category.position(titleX, titleY);
+	sortBlurb.position(category.x + category.width + 15/SCALER, category.y + 12/SCALER);
+
+	// --- Botones de accion: abajo, en la franja compartida con Sidebar ---
+	const int footerY = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT / 2 - quitBtn.height / 2;
+	const int gap = 10/SCALER;
+
+	// Salir queda fijo en el extremo derecho de la pantalla
+	quitBtn.position(SCREEN_WIDTH - quitBtn.width - 20/SCALER, footerY);
+
+	// el resto se acomoda de izquierda a derecha, empezando justo despues
+	// de la porcion del footer que dibuja Sidebar
+	int nextX = sidebar->width + 20/SCALER;
+
+	if (sidebar->searchModeActive)
+	{
+		keyboardBtn.position(nextX, footerY);
+		nextX = keyboardBtn.x + keyboardBtn.width + gap;
+
+		backspaceBtn.position(nextX, footerY);
+	}
+	else
+	{
+		toolsBtn.position(nextX, footerY);
+		nextX = toolsBtn.x + toolsBtn.width + gap;
+
+		sortBtn.position(nextX, footerY);
+		nextX = sortBtn.x + sortBtn.width + gap;
+
+#if defined(MUSIC)
+		if (RootDisplay::mainDisplay->music) {
+			muteBtn.position(nextX, footerY);
+			muteIcon.position(muteBtn.x + muteBtn.width + gap, footerY + (muteBtn.height - muteIcon.height) / 2);
+			unmuteIcon.position(muteIcon.x, muteIcon.y);
+			nextX = muteIcon.x + muteIcon.width + gap;
+		}
+#endif
+	}
+
+#if defined(MUSIC)
+	// "reproduciendo ahora" (o el aviso de modo applet) va despues de los
+	// demas botones, sin invadir el area de Salir
+	nowPlayingText.position(nextX, footerY + (quitBtn.height - nowPlayingText.height) / 2);
+	nowPlayingIcon.position(nowPlayingText.x - nowPlayingIcon.width - 5/SCALER, nowPlayingText.y);
+#endif
+#endif
 }
 
 void AppList::reorient()

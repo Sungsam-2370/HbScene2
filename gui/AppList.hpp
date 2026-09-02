@@ -57,6 +57,12 @@ public:
 	bool hideSidebar = false;
 	EKeyboard keyboard;
 
+	// posiciona el titulo/subtitulo de la seccion (arriba, fijo) y todos los
+	// botones de accion (abajo, en la franja compartida con Sidebar). Se
+	// llama desde update() para que ambos grupos usen siempre las mismas
+	// coordenadas, sin importar cuanto haya scrolleado la lista de tarjetas.
+	void positionChrome();
+
 private:
 	bool sortCompare(const Package& left, const Package& right);
 	std::random_device randDevice;
