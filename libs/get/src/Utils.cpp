@@ -113,7 +113,14 @@ std::string gLastCurlErrorMsg = "";
 //  - https://github.com/samdejong86/Arria-V-ADC-Ethernet-software/blob/master/ADC_Socket_bsp/iniche/src/h/socket.h
 int sockopt_callback(void* clientp __attribute__((unused)), curl_socket_t curlfd, curlsocktype purpose __attribute__((unused)))
 {
+#if defined(SWITCH)
+	// throughput per connection is limited by (receive window / RTT).
+	// with 128KB and ~80ms RTT that is only ~1.5MB/s, so ask for a much bigger window
+	// (must stay <= tcp_rx_buf_max_size configured in init_networking)
+	int winscale = 1, rcvbuf = 0x80000, tcpsack = 1;
+#else
 	int winscale = 1, rcvbuf = 0x20000, tcpsack = 1;
+#endif
 #ifndef WIN32
 	setsockopt(curlfd, SOL_SOCKET, SO_WINSCALE, &winscale, sizeof(int));
 	setsockopt(curlfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(int));
@@ -253,6 +260,10 @@ void setPlatformCurlFlags(CURL* c)
 
 	// set the user agent
 	curl_easy_setopt(c, CURLOPT_USERAGENT, USER_AGENT);
+
+	// read from the socket in bigger chunks (default is 16KB)
+	curl_easy_setopt(c, CURLOPT_BUFFERSIZE, 512L * 1024L);
+	curl_easy_setopt(c, CURLOPT_TCP_NODELAY, 1L);
 }
 
 // reset curl handle to a clean state to prevent state pollution between requests
@@ -654,7 +665,20 @@ bool compareLen(const std::string& a, const std::string& b)
 int init_networking()
 {
 #if defined(SWITCH)
-	socketInitializeDefault();
+	{
+		// bigger TCP buffers: the defaults (64KB rx) cap a single connection to a few MB/s
+		SocketInitConfig cfg = *socketGetDefaultInitConfig();
+		cfg.tcp_tx_buf_size     = 0x10000;
+		cfg.tcp_rx_buf_size     = 0x100000; // 1MB
+		cfg.tcp_tx_buf_max_size = 0x40000;
+		cfg.tcp_rx_buf_max_size = 0x100000; // 1MB
+		cfg.sb_efficiency       = 4;
+		if (R_FAILED(socketInitialize(&cfg)))
+		{
+			// not enough memory (e.g. applet mode)? fall back to the stock config
+			socketInitializeDefault();
+		}
+	}
 #endif
 #if defined(_3DS)
 	SOCUBuffer = (u32*)memalign(SOCU_ALIGN, SOCU_BUFFERSIZE);
