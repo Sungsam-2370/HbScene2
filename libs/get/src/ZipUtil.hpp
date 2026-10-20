@@ -4,8 +4,11 @@
 #include "unzip.h"
 #include "zip.h"
 
+#include <chrono>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 class Zip
 {
@@ -41,6 +44,16 @@ private:
 	std::string GetFileName(const unz_file_info_s& fileInfo);
 	std::string GetFullFileName(const unz_file_info_s& fileInfo);
 	unz_file_info_s GetFileInfo();
+	int ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo);
 	unzFile fileToUnzip;
 	bool cpuBoosted = false;
+
+	// folders already created while extracting (avoids a mkdir per file)
+	std::unordered_set<std::string> createdDirs;
+
+	// timing stats, printed when the zip is closed
+	std::chrono::steady_clock::time_point openedAt = std::chrono::steady_clock::now();
+	uint64_t statFiles = 0;
+	uint64_t statBytes = 0;
+	double statExtractMs = 0;
 };

@@ -169,6 +169,14 @@ void UnZip::Close()
 	{
 		unzClose(fileToUnzip);
 		fileToUnzip = nullptr;
+
+		if (statFiles > 0)
+		{
+			double totalMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - openedAt).count();
+			printf("--> Extraction stats: %llu files, %llu MB, %.1f s inside Extract(), %.1f s total with the zip open\n",
+				   (unsigned long long)statFiles, (unsigned long long)(statBytes >> 20), statExtractMs / 1000.0,
+				   totalMs / 1000.0);
+		}
 	}
 #if defined(SWITCH)
 	if (cpuBoosted)
@@ -432,6 +440,16 @@ int UnZip::Extract(const std::string& path, unz_file_pos& file_pos)
 
 int UnZip::Extract(const std::string& path, const unz_file_info_s& fileInfo)
 {
+	auto t0 = std::chrono::steady_clock::now();
+	int result = ExtractImpl(path, fileInfo);
+	statExtractMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+	statFiles++;
+	statBytes += fileInfo.uncompressed_size;
+	return result;
+}
+
+int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
+{
 	if (unzOpenCurrentFile(fileToUnzip) != UNZ_OK)
 	{
 		return -2;
@@ -440,7 +458,10 @@ int UnZip::Extract(const std::string& path, const unz_file_info_s& fileInfo)
 	size_t last_slash_idx = path.find_last_of("/\\");
 	if (last_slash_idx != std::string::npos)
 	{
-		CreateSubfolder(path.substr(0, last_slash_idx));
+		// only ask the filesystem once per folder (thousands of files share a few folders)
+		std::string dir = path.substr(0, last_slash_idx);
+		if (createdDirs.insert(dir).second)
+			CreateSubfolder(dir);
 	}
 
 	// small files don't need a big buffer (zips can have thousands of them)

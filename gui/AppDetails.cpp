@@ -684,8 +684,10 @@ int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 	double amount = dlnow;
 
 	// don't update the GUI too frequently here, it slows down downloading
+	// and extracting (every redraw takes real time, and while extracting thousands
+	// of small files this callback is called for each one of them).
 	// (never return early if it's 100% done)
-	if (diff < 32 && amount != 1)
+	if (diff < 120 && amount != 1)
 		return 0;
 
 	AppDetails* popup = (AppDetails*)RootDisplay::subscreen;
