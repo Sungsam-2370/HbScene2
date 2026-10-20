@@ -15,6 +15,10 @@
 #include "Utils.hpp"
 #include "ZipUtil.hpp"
 
+#if defined(SWITCH)
+#include <switch.h>
+#endif
+
 #define u32 uint32_t
 #define u8 uint8_t
 
@@ -147,6 +151,11 @@ UnZip::UnZip(const std::string& zipPath)
 {
 	printf("Unzip Path: %s\n", zipPath.c_str());
 	fileToUnzip = unzOpen(zipPath.c_str());
+#if defined(SWITCH)
+	// inflating a big zip is CPU heavy: ask for the faster clock while we have it open
+	if (R_SUCCEEDED(appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad)))
+		cpuBoosted = true;
+#endif
 }
 
 UnZip::~UnZip()
@@ -156,7 +165,18 @@ UnZip::~UnZip()
 
 void UnZip::Close()
 {
-	unzClose(fileToUnzip);
+	if (fileToUnzip != nullptr)
+	{
+		unzClose(fileToUnzip);
+		fileToUnzip = nullptr;
+	}
+#if defined(SWITCH)
+	if (cpuBoosted)
+	{
+		appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
+		cpuBoosted = false;
+	}
+#endif
 }
 
 bool UnZip::IsValid()
@@ -423,8 +443,11 @@ int UnZip::Extract(const std::string& path, const unz_file_info_s& fileInfo)
 		CreateSubfolder(path.substr(0, last_slash_idx));
 	}
 
+	// small files don't need a big buffer (zips can have thousands of them)
 	u32 blocksize = 0x80000;
-	u8* buffer = (u8*)aligned_alloc(0x20000, blocksize);
+	if (fileInfo.uncompressed_size < blocksize)
+		blocksize = (fileInfo.uncompressed_size < 0x1000) ? 0x1000 : (u32)fileInfo.uncompressed_size;
+	u8* buffer = (u8*)aligned_alloc(0x1000, (blocksize + 0xFFF) & ~0xFFFu);
 	if (buffer == nullptr)
 	{
 		unzCloseCurrentFile(fileToUnzip);
@@ -439,23 +462,38 @@ int UnZip::Extract(const std::string& path, const unz_file_info_s& fileInfo)
 	}
 
 	u32 done = 0;
-	int writeBytes;
-	while (done < fileInfo.uncompressed_size)
+	bool failed = false;
+	while (done < fileInfo.uncompressed_size && !failed)
 	{
-		if (done + blocksize > fileInfo.uncompressed_size)
+		u32 want = blocksize;
+		if (done + want > fileInfo.uncompressed_size)
+			want = fileInfo.uncompressed_size - done;
+
+		int readBytes = unzReadCurrentFile(fileToUnzip, buffer, want);
+		if (readBytes <= 0)
 		{
-			blocksize = fileInfo.uncompressed_size - done;
-		}
-		unzReadCurrentFile(fileToUnzip, buffer, blocksize);
-		writeBytes = write(fd, buffer, blocksize);
-		if (writeBytes <= 0)
-		{
+			// read/inflate error or truncated zip: never write garbage and call it a success
+			failed = true;
 			break;
 		}
-		done += writeBytes;
+
+		// write() may write less than requested
+		int off = 0;
+		while (off < readBytes)
+		{
+			int writeBytes = write(fd, buffer + off, readBytes - off);
+			if (writeBytes <= 0)
+			{
+				failed = true;
+				break;
+			}
+			off += writeBytes;
+		}
+		done += off;
 	}
 
-	fsync(fd);
+	// no fsync() here: it forced a flush to the SD card for every single file,
+	// which is very slow with many files. close() already hands the data to the filesystem.
 	close(fd);
 	cross_free(buffer);
 	unzCloseCurrentFile(fileToUnzip);

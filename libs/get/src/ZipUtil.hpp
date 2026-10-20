@@ -42,4 +42,5 @@ private:
 	std::string GetFullFileName(const unz_file_info_s& fileInfo);
 	unz_file_info_s GetFileInfo();
 	unzFile fileToUnzip;
+	bool cpuBoosted = false;
 };

@@ -101,7 +101,13 @@
 
 
 #ifndef UNZ_BUFSIZE
-#define UNZ_BUFSIZE (16384)
+/* Every refill of this buffer is one fseek + one fread on the SD card.
+   16KB meant tens of thousands of tiny SD reads for a big zip. */
+#if defined(SWITCH) || defined(__SWITCH__)
+#define UNZ_BUFSIZE (0x40000) /* 256KB */
+#else
+#define UNZ_BUFSIZE (0x10000) /* 64KB */
+#endif
 #endif
 
 #ifndef UNZ_MAXFILENAMEINZIP
