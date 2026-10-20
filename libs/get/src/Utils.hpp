@@ -67,6 +67,7 @@ typedef int (*libget_progress_callback_t)(void* clientp, double progress);
 extern libget_progress_callback_t networking_callback;
 extern int (*libget_status_callback)(int, int, int);
 extern void* networking_callback_data; // User data to pass to networking_callback
+extern int libget_download_connections; // parallel connections for big downloads, 1 = disabled
 void setUserAgent(const char* data);
 
 // helper methods

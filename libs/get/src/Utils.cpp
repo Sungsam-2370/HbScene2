@@ -27,6 +27,8 @@
 #endif
 
 #include <algorithm>
+#include <deque>
+#include <vector>
 #include <cstdint>
 #include <ctime>
 #include <dirent.h>
@@ -540,6 +542,350 @@ bool getRemoteFileMetadata(const std::string& remote_path, download_metadata_t* 
 	return false;
 }
 
+#ifndef NETWORK_MOCK
+// ---------------------------------------------------------------------------
+// segmented download: several HTTP Range requests in parallel (curl_multi)
+//
+// A single TCP connection is limited to (receive window / RTT), which is very
+// low on the consoles. Using a few connections at once multiplies that limit.
+//
+// Chunks are written to disk strictly in order (append only), so the file on
+// disk is always a valid prefix of the remote file. That keeps resume working.
+// ---------------------------------------------------------------------------
+#define SEG_MIN_SIZE      (8LL * 1024 * 1024) // smaller files use the regular path
+#define SEG_CHUNK_SIZE    (4LL * 1024 * 1024) // bytes requested per Range request
+#define SEG_WINDOW_CHUNKS 8                   // max chunks in memory at once
+#define SEG_MAX_RETRIES   3
+
+struct SegProbe
+{
+	std::string etag;
+	bool accept_ranges = false;
+};
+
+struct SegChunk
+{
+	std::string data;
+	size_t expected = 0;
+	bool done = false;
+	int retries = 0;
+};
+
+static size_t SegProbeHeaderCallback(void* contents, size_t size, size_t nmemb, void* userp)
+{
+	auto* probe = (SegProbe*)userp;
+	size_t realsize = size * nmemb;
+	std::string line = toLower(std::string((char*)contents, realsize));
+
+	if (line.compare(0, 5, "http/") == 0)
+	{
+		// new response (e.g. after a redirect): forget previous headers
+		probe->etag.clear();
+		probe->accept_ranges = false;
+	}
+	else if (line.compare(0, 5, "etag:") == 0)
+	{
+		// keep original case, the value is compared byte by byte later
+		std::string raw((char*)contents + 5, realsize - 5);
+		size_t b = raw.find_first_not_of(" \t");
+		size_t e = raw.find_last_not_of(" \t\r\n");
+		if (b != std::string::npos && e != std::string::npos && e >= b)
+			probe->etag = raw.substr(b, e - b + 1);
+	}
+	else if (line.compare(0, 14, "accept-ranges:") == 0)
+	{
+		probe->accept_ranges = line.find("bytes") != std::string::npos;
+	}
+	return realsize;
+}
+
+static size_t SegWriteCallback(void* contents, size_t size, size_t nmemb, void* userp)
+{
+	auto* chunk = (SegChunk*)userp;
+	size_t realsize = size * nmemb;
+	// a server that ignores Range would send the whole file: refuse to buffer it
+	if (chunk->data.size() + realsize > chunk->expected)
+		return 0;
+	chunk->data.append((char*)contents, realsize);
+	return realsize;
+}
+
+// number of parallel connections for big downloads (1 disables segmented downloads)
+#if defined(_3DS) || defined(WII) || defined(WIIU)
+int libget_download_connections = 1; // not enough RAM to spare
+#else
+int libget_download_connections = 4;
+#endif
+
+// Returns true if the whole file was downloaded.
+// *handled == false means nothing was done and the caller should use the regular single connection path.
+// *resume_from is updated if we decided to restart from scratch.
+static bool downloadFileSegmented(const std::string& remote_path, const std::string& local_path, bool resume,
+								  long* resume_from, const download_metadata_t& old_metadata,
+								  download_metadata_t* metadata, bool* handled)
+{
+	*handled = false;
+
+	const int connections = libget_download_connections;
+	if (connections <= 1 || !curl)
+		return false;
+
+	// 1. ask the server about the file (size, ETag, Range support)
+	SegProbe probe;
+	curl_off_t total = 0;
+	long code = 0;
+
+	setPlatformCurlFlags(curl);
+	curl_easy_setopt(curl, CURLOPT_URL, remote_path.c_str());
+	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, SegProbeHeaderCallback);
+	curl_easy_setopt(curl, CURLOPT_HEADERDATA, &probe);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
+	CURLcode pres = curl_easy_perform(curl);
+	if (pres == CURLE_OK)
+	{
+		curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &total);
+		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+	}
+	resetCurlToCleanState(curl);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 0L);
+
+	if (pres != CURLE_OK || code != 200 || !probe.accept_ranges || total < SEG_MIN_SIZE)
+	{
+		printf("--> Segmented download not used (curl=%d http=%ld ranges=%d size=%lld)\n", (int)pres, code,
+			   (int)probe.accept_ranges, (long long)total);
+		return false;
+	}
+
+	// 2. decide where to start
+	curl_off_t start = *resume_from;
+	if (start > 0)
+	{
+		bool etag_changed = !old_metadata.etag.empty() && !probe.etag.empty() && old_metadata.etag != probe.etag;
+		if (etag_changed || start >= total)
+		{
+			printf("--> Remote file changed, restarting download from the beginning\n");
+			start = 0;
+			*resume_from = 0;
+		}
+	}
+
+	FILE* out = fopen(local_path.c_str(), (resume && start > 0) ? "ab" : "wb");
+	if (!out)
+		return false;
+
+	*handled = true;
+	if (metadata)
+	{
+		metadata->etag = probe.etag;
+		metadata->content_length = (long)total;
+	}
+
+	printf("--> Segmented download: %lld bytes, %d connections, starting at %lld\n", (long long)total, connections,
+		   (long long)start);
+
+	// 3. set up chunks and workers
+	const curl_off_t remaining = total - start;
+	const long nchunks = (long)((remaining + SEG_CHUNK_SIZE - 1) / SEG_CHUNK_SIZE);
+	std::vector<SegChunk> chunks(nchunks);
+	for (long i = 0; i < nchunks; i++)
+	{
+		curl_off_t b = start + (curl_off_t)i * SEG_CHUNK_SIZE;
+		curl_off_t e = std::min<curl_off_t>(b + SEG_CHUNK_SIZE, total);
+		chunks[i].expected = (size_t)(e - b);
+	}
+
+	struct Worker
+	{
+		CURL* easy = nullptr;
+		long chunk = -1;
+	};
+	const int nworkers = (int)std::min<long>(connections, nchunks);
+	std::vector<Worker> workers(nworkers);
+
+	CURLM* multi = curl_multi_init();
+	curl_multi_setopt(multi, CURLMOPT_MAX_HOST_CONNECTIONS, (long)nworkers);
+#ifdef CURLPIPE_NOTHING
+	// we want separate TCP connections, not one multiplexed connection
+	curl_multi_setopt(multi, CURLMOPT_PIPELINING, (long)CURLPIPE_NOTHING);
+#endif
+
+	// only continue if the file did not change between requests
+	struct curl_slist* headers = nullptr;
+	if (!probe.etag.empty() && probe.etag.compare(0, 2, "W/") != 0)
+	{
+		std::string if_range = "If-Range: " + probe.etag;
+		headers = curl_slist_append(headers, if_range.c_str());
+	}
+
+	for (auto& w : workers)
+	{
+		w.easy = curl_easy_init();
+		setPlatformCurlFlags(w.easy);
+		curl_easy_setopt(w.easy, CURLOPT_URL, remote_path.c_str());
+		curl_easy_setopt(w.easy, CURLOPT_WRITEFUNCTION, SegWriteCallback);
+		curl_easy_setopt(w.easy, CURLOPT_NOSIGNAL, 1L);
+		curl_easy_setopt(w.easy, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_1_1);
+		curl_easy_setopt(w.easy, CURLOPT_CONNECTTIMEOUT, 20L);
+		// give up on a connection that is basically dead (<1 KB/s for 30 s)
+		curl_easy_setopt(w.easy, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+		curl_easy_setopt(w.easy, CURLOPT_LOW_SPEED_TIME, 30L);
+		if (headers)
+			curl_easy_setopt(w.easy, CURLOPT_HTTPHEADER, headers);
+	}
+
+	long nextAssign = 0; // next never-requested chunk
+	long nextWrite = 0;  // next chunk to append to the file
+	std::deque<long> retryQueue;
+	curl_off_t written = start;
+	bool failed = false, aborted = false;
+
+	auto startChunk = [&](Worker& w, long idx)
+	{
+		curl_off_t b = start + (curl_off_t)idx * SEG_CHUNK_SIZE;
+		curl_off_t e = b + (curl_off_t)chunks[idx].expected - 1;
+		char range[64];
+		snprintf(range, sizeof(range), "%lld-%lld", (long long)b, (long long)e);
+		chunks[idx].data.clear();
+		chunks[idx].data.reserve(chunks[idx].expected);
+		curl_easy_setopt(w.easy, CURLOPT_RANGE, range);
+		curl_easy_setopt(w.easy, CURLOPT_WRITEDATA, &chunks[idx]);
+		curl_multi_add_handle(multi, w.easy);
+		w.chunk = idx;
+	};
+
+	// hands out work to idle workers, returns true if anything was started
+	auto assignWork = [&]() -> bool
+	{
+		bool any = false;
+		for (auto& w : workers)
+		{
+			if (w.chunk >= 0)
+				continue;
+			if (!retryQueue.empty())
+			{
+				long idx = retryQueue.front();
+				retryQueue.pop_front();
+				startChunk(w, idx);
+				any = true;
+			}
+			else if (nextAssign < nchunks && nextAssign < nextWrite + SEG_WINDOW_CHUNKS)
+			{
+				startChunk(w, nextAssign++);
+				any = true;
+			}
+		}
+		return any;
+	};
+
+	assignWork();
+
+	while (!failed && !aborted && nextWrite < nchunks)
+	{
+		int running = 0;
+		curl_multi_perform(multi, &running);
+
+		// finished transfers
+		int msgs_left = 0;
+		while (CURLMsg* msg = curl_multi_info_read(multi, &msgs_left))
+		{
+			if (msg->msg != CURLMSG_DONE)
+				continue;
+			Worker* w = nullptr;
+			for (auto& cand : workers)
+				if (cand.easy == msg->easy_handle)
+					w = &cand;
+			if (!w || w->chunk < 0)
+				continue;
+
+			long http = 0;
+			curl_easy_getinfo(w->easy, CURLINFO_RESPONSE_CODE, &http);
+			curl_multi_remove_handle(multi, w->easy);
+
+			SegChunk& c = chunks[w->chunk];
+			bool ok = msg->data.result == CURLE_OK && http == 206 && c.data.size() == c.expected;
+			if (ok)
+			{
+				c.done = true;
+			}
+			else
+			{
+				printf("--> chunk %ld failed (curl=%d http=%ld got=%zu/%zu), retry %d\n", w->chunk,
+					   (int)msg->data.result, http, c.data.size(), c.expected, c.retries + 1);
+				gLastCurlErrorMsg = curl_easy_strerror(msg->data.result);
+				if (++c.retries > SEG_MAX_RETRIES)
+					failed = true;
+				else
+					retryQueue.push_back(w->chunk);
+			}
+			w->chunk = -1;
+		}
+
+		// append finished chunks to the file, in order
+		while (!failed && nextWrite < nchunks && chunks[nextWrite].done)
+		{
+			SegChunk& c = chunks[nextWrite];
+			if (fwrite(c.data.data(), 1, c.data.size(), out) != c.data.size())
+			{
+				gLastCurlErrorMsg = "write error (disk full?)";
+				failed = true;
+				break;
+			}
+			written += (curl_off_t)c.data.size();
+			std::string().swap(c.data); // free the memory
+			nextWrite++;
+		}
+
+		// progress (also lets the UI cancel the download)
+		if (networking_callback != nullptr)
+		{
+			curl_off_t have = written;
+			for (long i = nextWrite; i < nextAssign; i++)
+				have += (curl_off_t)chunks[i].data.size();
+			double progress = (double)have / (double)total;
+			if (progress > 1.0)
+				progress = 1.0;
+			if (networking_callback(networking_callback_data, progress) != 0)
+				aborted = true;
+		}
+
+		if (failed || aborted)
+			break;
+
+		if (assignWork())
+			continue; // new transfers need a perform() right away
+
+		int numfds = 0;
+		curl_multi_wait(multi, nullptr, 0, 100, &numfds);
+		if (numfds == 0)
+			usleep(2000); // avoid spinning if there is nothing to wait on
+	}
+
+	// 4. cleanup
+	for (auto& w : workers)
+	{
+		if (w.chunk >= 0)
+			curl_multi_remove_handle(multi, w.easy);
+		curl_easy_cleanup(w.easy);
+	}
+	curl_multi_cleanup(multi);
+	if (headers)
+		curl_slist_free_all(headers);
+	fclose(out); // flushes: what is on disk is exactly [0, written)
+
+	if (failed || aborted)
+	{
+		printf("--> Segmented download %s at byte %lld\n", aborted ? "cancelled" : "failed", (long long)written);
+		// nothing received at all: maybe the server lies about Range support, let the regular path try
+		if (failed && written == start)
+			*handled = false;
+		return false;
+	}
+
+	return true;
+}
+#endif
+
 // downloads happen metadata being observed, but not necessarily saved
 bool downloadFileToDiskWithMetadata(const std::string& remote_path, const std::string& local_path, bool resume, download_metadata_t* metadata)
 {
@@ -566,6 +912,16 @@ bool downloadFileToDiskWithMetadata(const std::string& remote_path, const std::s
 		}
 	}
 	
+#ifndef NETWORK_MOCK
+	// big files: try several parallel Range requests first
+	{
+		bool handled = false;
+		bool seg_ok = downloadFileSegmented(remote_path, local_path, resume, &resume_from, old_metadata, metadata, &handled);
+		if (handled)
+			return seg_ok;
+	}
+#endif
+
 	// open our tmp data in append mode if resuming, otherwise write mode
 	FILE* out_file = fopen(local_path.c_str(), resume && resume_from > 0 ? "ab" : "wb");
 	if (!out_file)
