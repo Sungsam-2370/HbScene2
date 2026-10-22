@@ -6,6 +6,8 @@
 
 #include <switch/services/ncm.h>
 
+#include "ByteSource.hpp"
+
 namespace nspinstall {
 
 struct InstallProgress {
@@ -37,6 +39,12 @@ struct InstallConfig {
     bool         ignore_req_fw   = true;
     bool         reinstall_ncas  = false;
 };
+
+// Instala desde cualquier fuente de bytes (archivo local, o internet con HTTP Range).
+// La fuente debe ser un NSP o NSZ (contenedor PFS0).
+InstallResult InstallFromSource(ByteSource &source,
+                                 const InstallConfig &config,
+                                 ProgressCallback progress = nullptr);
 
 InstallResult InstallFromLocalFile(const std::string &file_path,
                                     const InstallConfig &config,

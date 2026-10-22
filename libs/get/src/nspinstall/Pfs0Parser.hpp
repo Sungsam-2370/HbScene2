@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "ByteSource.hpp"
+
 namespace nspinstall {
 
 struct Pfs0Entry {
@@ -13,6 +15,12 @@ struct Pfs0Entry {
 };
 
 bool ParsePfs0(const std::string &path,
+               std::vector<Pfs0Entry> &entries,
+               std::uint64_t &data_offset);
+
+// Igual, pero leyendo de cualquier fuente de bytes (archivo local o HTTP).
+// Solo lee el encabezado (tabla de archivos + tabla de nombres), no el contenido.
+bool ParsePfs0(ByteSource &source,
                std::vector<Pfs0Entry> &entries,
                std::uint64_t &data_offset);
 

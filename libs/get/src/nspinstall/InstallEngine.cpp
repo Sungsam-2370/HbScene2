@@ -1,4 +1,5 @@
 #include "InstallEngine.hpp"
+#include "ByteSource.hpp"
 #include "ContentMeta.hpp"
 #include "CryptoUtils.hpp"
 #include "NcaStructs.hpp"
@@ -189,7 +190,7 @@ const GenericEntry *FindEntryByNcaId(const std::vector<GenericEntry> &entries,
     return nullptr;
 }
 
-bool StreamNcaToStorage(FILE *file, std::uint64_t offset, std::uint64_t size,
+bool StreamNcaToStorage(ByteSource &source, std::uint64_t offset, std::uint64_t size,
                          ContentStorage &storage, const NcmContentId &nca_id,
                          ProgressCallback &progress,
                          std::uint32_t nca_index, std::uint32_t nca_count,
@@ -201,8 +202,10 @@ bool StreamNcaToStorage(FILE *file, std::uint64_t offset, std::uint64_t size,
     std::uint64_t nca_size = size;
 
     if(size >= kNcaHeaderSize) {
-        if(std::fseek(file, static_cast<long>(offset), SEEK_SET) != 0) return false;
-        if(std::fread(&raw_header, kNcaHeaderSize, 1, file) == 1 && header_key) {
+        // sin el encabezado no se puede seguir: escribir un encabezado en ceros
+        // dejaria un NCA corrupto instalado
+        if(!source.Read(offset, &raw_header, kNcaHeaderSize)) return false;
+        if(header_key) {
             NcaHeader dec = raw_header;
             DecryptNcaHeader(&dec, kNcaHeaderSize, *header_key);
             if(dec.magic == kMagicNca3) {
@@ -239,17 +242,16 @@ bool StreamNcaToStorage(FILE *file, std::uint64_t offset, std::uint64_t size,
         if(progress) progress(InstallProgress{written, nca_size, nca_name, nca_index, nca_count, false});
     }
 
-    if(std::fseek(file, static_cast<long>(offset + written), SEEK_SET) != 0) return false;
-
-    auto buf = std::make_unique<std::uint8_t[]>(kStreamBufferSize);
-    while(written < nca_size) {
-        const std::size_t chunk = std::min<std::size_t>(kStreamBufferSize, nca_size - written);
-        const std::size_t read_count = std::fread(buf.get(), 1, chunk, file);
-        if(read_count == 0) break;
-        if(!storage.WritePlaceholder(nca_id, written, buf.get(), read_count)) return false;
-        written += read_count;
-        if(progress) progress(InstallProgress{written, nca_size, nca_name, nca_index, nca_count, false});
-    }
+    // el resto del NCA, en orden, en los trozos que entregue la fuente
+    bool write_ok = true;
+    const bool read_ok = source.ReadRange(offset + written, nca_size - written,
+        [&](const void *data, std::size_t len) -> bool {
+            if(!storage.WritePlaceholder(nca_id, written, data, len)) { write_ok = false; return false; }
+            written += len;
+            if(progress) progress(InstallProgress{written, nca_size, nca_name, nca_index, nca_count, false});
+            return true;
+        });
+    if(!write_ok || !read_ok) return false;
 
     if(written != nca_size) return false;
     storage.Register(nca_id, nca_id);
@@ -257,13 +259,33 @@ bool StreamNcaToStorage(FILE *file, std::uint64_t offset, std::uint64_t size,
     return true;
 }
 
-bool InstallSingleNca(FILE *file, const std::string &container_path,
+bool InstallSingleNca(ByteSource &source,
                        const GenericEntry *nca_entry,
                        ContentStorage &storage, const NcmContentId &nca_id,
                        ProgressCallback &progress,
                        std::uint32_t nca_index, std::uint32_t nca_count,
                        const HeaderKey *header_key) {
     if(IsNczFilename(nca_entry->name)) {
+        const std::string container_path = source.LocalPath();
+
+        if(container_path.empty()) {
+            // La fuente no es un archivo local (ej. internet): solo existe el camino
+            // que descomprime en streaming directo al almacenamiento. El camino de
+            // respaldo escribiria el NCA descomprimido en un archivo temporal en la
+            // SD, justo lo que se quiere evitar (limite de 4 GB de FAT32).
+            if(header_key == nullptr) return false;
+            NczRangeReader reader = [&source](std::uint64_t off, std::uint64_t sz,
+                                              std::function<bool(const void *, std::size_t)> write_fn) {
+                return source.ReadRange(off, sz, write_fn);
+            };
+            return DecompressNczFromRangeReaderToStorage(
+                reader, nca_entry->offset, nca_entry->size,
+                storage, nca_id, *header_key,
+                [&progress, &nca_entry, nca_index, nca_count](std::uint64_t done, std::uint64_t total) {
+                    if(progress) progress(InstallProgress{done, total, nca_entry->name, nca_index, nca_count, true});
+                });
+        }
+
         if(header_key != nullptr) {
             const bool ok = DecompressNczToStorage(
                 container_path, nca_entry->offset, nca_entry->size,
@@ -281,7 +303,7 @@ bool InstallSingleNca(FILE *file, const std::string &container_path,
             });
 
         if(decompressed.empty()) {
-            return StreamNcaToStorage(file, nca_entry->offset, nca_entry->size,
+            return StreamNcaToStorage(source, nca_entry->offset, nca_entry->size,
                                        storage, nca_id, progress, nca_index, nca_count,
                                        nca_entry->name, header_key);
         }
@@ -291,23 +313,23 @@ bool InstallSingleNca(FILE *file, const std::string &container_path,
 
         std::fseek(tmp_file, 0, SEEK_END);
         const std::uint64_t decompressed_size = static_cast<std::uint64_t>(std::ftell(tmp_file));
-        std::fseek(tmp_file, 0, SEEK_SET);
+        std::fclose(tmp_file);
 
-        bool ok = StreamNcaToStorage(tmp_file, 0, decompressed_size,
+        FileByteSource tmp_source(decompressed);
+        bool ok = tmp_source.IsOpen() &&
+                  StreamNcaToStorage(tmp_source, 0, decompressed_size,
                                       storage, nca_id, progress, nca_index, nca_count,
                                       nca_entry->name, header_key);
-        std::fclose(tmp_file);
         std::remove(decompressed.c_str());
         return ok;
     }
 
-    return StreamNcaToStorage(file, nca_entry->offset, nca_entry->size,
+    return StreamNcaToStorage(source, nca_entry->offset, nca_entry->size,
                                storage, nca_id, progress, nca_index, nca_count,
                                nca_entry->name, header_key);
 }
 
-InstallResult InstallFromEntries(FILE *file,
-                                  const std::string &container_path,
+InstallResult InstallFromEntries(ByteSource &source,
                                   const std::vector<GenericEntry> &entries,
                                   const InstallConfig &config,
                                   ProgressCallback progress) {
@@ -356,10 +378,8 @@ InstallResult InstallFromEntries(FILE *file,
         printf("[nspinstall] importando ticket %zu/%zu (%s)\n", i + 1, tik_entries.size(), tik_e->name.c_str());
         auto tik_buf  = std::make_unique<std::uint8_t[]>(tik_e->size);
         auto cert_buf = std::make_unique<std::uint8_t[]>(cert_e->size);
-        std::fseek(file, static_cast<long>(tik_e->offset), SEEK_SET);
-        if(std::fread(tik_buf.get(), tik_e->size, 1, file) != 1) continue;
-        std::fseek(file, static_cast<long>(cert_e->offset), SEEK_SET);
-        if(std::fread(cert_buf.get(), cert_e->size, 1, file) != 1) continue;
+        if(!source.Read(tik_e->offset, tik_buf.get(), tik_e->size)) continue;
+        if(!source.Read(cert_e->offset, cert_buf.get(), cert_e->size)) continue;
 #if defined(SWITCH)
         appletReportUserIsActive(); // ImportTicket es IPC bloqueante sin progreso propio
 #endif
@@ -390,7 +410,7 @@ InstallResult InstallFromEntries(FILE *file,
 
         if(!storage.Has(cnmt_nca_id) || config.reinstall_ncas) {
             printf("[nspinstall] instalando CNMT nca %s\n", cnmt_entry->name.c_str());
-            if(!InstallSingleNca(file, container_path, cnmt_entry,
+            if(!InstallSingleNca(source, cnmt_entry,
                                   storage, cnmt_nca_id, progress, 0, 0, hk_ptr)) {
                 result.error_message = "Failed to install CNMT NCA: " + cnmt_entry->name;
                 return result;
@@ -475,7 +495,7 @@ InstallResult InstallFromEntries(FILE *file,
 
         printf("[nspinstall] nca %u/%u -> %s (%llu bytes)\n", nca_index, total_ncas,
                nca_entry->name.c_str(), (unsigned long long)nca_entry->size);
-        if(!InstallSingleNca(file, container_path, nca_entry,
+        if(!InstallSingleNca(source, nca_entry,
                               storage, content_info.content_id,
                               progress, nca_index, total_ncas, hk_ptr)) {
             result.error_message = "Failed to install NCA: " + nca_entry->name;
@@ -507,25 +527,19 @@ InstallResult InstallFromEntries(FILE *file,
 
 }
 
-InstallResult InstallNsp(const std::string &file_path,
-                          const InstallConfig &config,
-                          ProgressCallback progress) {
+InstallResult InstallFromSource(ByteSource &source,
+                                 const InstallConfig &config,
+                                 ProgressCallback progress) {
     InstallResult result;
 
     std::vector<Pfs0Entry> pfs0_entries;
     std::uint64_t data_offset = 0;
-    if(!ParsePfs0(file_path, pfs0_entries, data_offset)) {
+    if(!ParsePfs0(source, pfs0_entries, data_offset)) {
         result.error_message = "Failed to parse NSP/NSZ header";
         return result;
     }
     if(pfs0_entries.empty()) {
         result.error_message = "NSP contains no files";
-        return result;
-    }
-
-    FILE *file = std::fopen(file_path.c_str(), "rb");
-    if(!file) {
-        result.error_message = "Cannot open file";
         return result;
     }
 
@@ -539,11 +553,22 @@ InstallResult InstallNsp(const std::string &file_path,
         generic_entries.push_back({ e.name, e.offset, e.size });
     }
 
-    result = InstallFromEntries(file, file_path, generic_entries, config, progress);
+    result = InstallFromEntries(source, generic_entries, config, progress);
 
     appletSetMediaPlaybackState(false);
-    std::fclose(file);
     return result;
+}
+
+InstallResult InstallNsp(const std::string &file_path,
+                          const InstallConfig &config,
+                          ProgressCallback progress) {
+    FileByteSource source(file_path);
+    if(!source.IsOpen()) {
+        InstallResult result;
+        result.error_message = "Failed to parse NSP/NSZ header";
+        return result;
+    }
+    return InstallFromSource(source, config, std::move(progress));
 }
 
 InstallResult InstallFromLocalFile(const std::string &file_path,

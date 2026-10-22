@@ -26,35 +26,37 @@ bool ParsePfs0(const std::string &path,
     entries.clear();
     data_offset = 0;
 
-    FILE *file = std::fopen(path.c_str(), "rb");
-    if(!file) return false;
+    FileByteSource source(path);
+    if(!source.IsOpen()) return false;
+    return ParsePfs0(source, entries, data_offset);
+}
+
+bool ParsePfs0(ByteSource &source,
+               std::vector<Pfs0Entry> &entries,
+               std::uint64_t &data_offset) {
+    entries.clear();
+    data_offset = 0;
 
     Pfs0Header header{};
-    if(std::fread(&header, sizeof(header), 1, file) != 1) {
-        std::fclose(file);
-        return false;
-    }
-    if(header.magic != kMagicPfs0) {
-        std::fclose(file);
-        return false;
-    }
-    if(header.file_count == 0) {
-        std::fclose(file);
-        return true;
-    }
+    if(!source.Read(0, &header, sizeof(header))) return false;
+    if(header.magic != kMagicPfs0) return false;
+    if(header.file_count == 0) return true;
+
+    // los datos pueden venir de internet: no confiar en tamanos absurdos
+    constexpr std::uint32_t kMaxFiles       = 100000;
+    constexpr std::uint32_t kMaxStringTable = 64u * 1024u * 1024u;
+    if(header.file_count > kMaxFiles || header.string_table_size > kMaxStringTable) return false;
 
     const std::size_t entry_table_size = header.file_count * sizeof(Pfs0FileEntry);
     auto entry_buf = std::make_unique<std::uint8_t[]>(entry_table_size);
-    if(std::fread(entry_buf.get(), entry_table_size, 1, file) != 1) {
-        std::fclose(file);
-        return false;
-    }
+    if(!source.Read(sizeof(Pfs0Header), entry_buf.get(), entry_table_size)) return false;
 
-    auto string_buf = std::make_unique<char[]>(header.string_table_size);
-    if(std::fread(string_buf.get(), header.string_table_size, 1, file) != 1) {
-        std::fclose(file);
+    // +1 y terminador: los nombres se leen como cadenas C
+    auto string_buf = std::make_unique<char[]>(static_cast<std::size_t>(header.string_table_size) + 1);
+    if(!source.Read(sizeof(Pfs0Header) + entry_table_size, string_buf.get(), header.string_table_size)) {
         return false;
     }
+    string_buf[header.string_table_size] = '\0';
 
     const std::uint64_t data_start = sizeof(Pfs0Header) +
                                      entry_table_size +
@@ -74,7 +76,6 @@ bool ParsePfs0(const std::string &path,
         entries.push_back(std::move(entry));
     }
 
-    std::fclose(file);
     return true;
 }
 
