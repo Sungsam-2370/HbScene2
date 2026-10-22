@@ -21,6 +21,9 @@ public:
 	void displaySubscreen();
 	void handleIconLoad();
 
+	// carga el icono ahora mismo si la tarjeta ya esta (o casi) a la vista
+	void preloadIfVisible();
+
 	Package* package;
 	AppList* list;
 	bool iconFetch = false;

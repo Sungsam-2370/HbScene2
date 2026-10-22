@@ -14,6 +14,7 @@ NetImageElement::NetImageElement(const char *url, std::function<Texture *(void)>
 	: diskCachePath(diskCachePath)
 {
 	std::string key = std::string(url);
+	imageKey = key;
 	// printf("Key: %s\n", key.c_str());
 	if (loadFromCache(key)) {
 		loaded = true;
@@ -23,15 +24,7 @@ NetImageElement::NetImageElement(const char *url, std::function<Texture *(void)>
 		width = texW;
 		height = texH;
 	}
-	else if (fileExistsOnDisk(diskCachePath) && [&]{
-		// intento cargar directo del cache en disco, sin tocar la red.
-		// Si el archivo esta corrupto/no es una imagen valida, seguimos
-		// de largo y caemos a la descarga por red como si no existiera.
-		CST_Surface *surface = IMG_Load(diskCachePath.c_str());
-		bool ok = loadFromSurfaceSaveToCache(key, surface);
-		if (surface) CST_FreeSurface(surface);
-		return ok;
-	}())
+	else if (immediateLoad && tryLoadFromDisk())
 	{
 		loaded = true;
 		width = texW;
@@ -46,6 +39,9 @@ NetImageElement::NetImageElement(const char *url, std::function<Texture *(void)>
 		imgDownload = new DownloadOperation();
 		imgDownload->url = std::string(url);
 		imgDownload->cb = std::bind(&NetImageElement::imgDownloadComplete, this, std::placeholders::_1);
+
+		// sin carga inmediata, el cache en disco se revisa recien en fetch()
+		pendingDiskLoad = !immediateLoad && !diskCachePath.empty();
 
 		// load immediately
 		if (immediateLoad)
@@ -65,8 +61,41 @@ NetImageElement::~NetImageElement()
 	}
 }
 
+// intento cargar directo del cache en disco, sin tocar la red.
+// Si el archivo esta corrupto/no es una imagen valida, devuelve false y se cae
+// a la descarga por red como si no existiera.
+bool NetImageElement::tryLoadFromDisk()
+{
+	if (!fileExistsOnDisk(diskCachePath))
+		return false;
+
+	std::string key = imageKey;
+	CST_Surface *surface = IMG_Load(diskCachePath.c_str());
+	bool ok = loadFromSurfaceSaveToCache(key, surface);
+	if (surface) CST_FreeSurface(surface);
+	return ok;
+}
+
 void NetImageElement::fetch()
 {
+	if (pendingDiskLoad)
+	{
+		pendingDiskLoad = false;
+		if (tryLoadFromDisk())
+		{
+			loaded = true;
+			needsRedraw = true;
+
+			delete imgFallback;
+			imgFallback = nullptr;
+
+			// la descarga nunca se encolo, solo hay que liberarla
+			delete imgDownload;
+			imgDownload = nullptr;
+			return;
+		}
+	}
+
 	if (!downloadStarted && imgDownload) {
 		DownloadQueue::downloadQueue->downloadAdd(imgDownload);
 		downloadStarted = true;

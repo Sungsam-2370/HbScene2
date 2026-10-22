@@ -528,6 +528,11 @@ void AppList::update()
 		card.position(25 + (card.index % R) * (card.width + 9 / SCALER), 145 + (card.height + 15) * (card.index / R));
 		card.update();
 		super::append(&card);
+
+		// las tarjetas que ya quedan a la vista cargan su icono ahora (asi no
+		// hay un parpadeo con el icono generico); las demas esperan a estar
+		// cerca de la pantalla, ver AppCard::handleIconLoad
+		card.preloadIfVisible();
 	}
 	totalCount = appCards.size();
 
@@ -539,8 +544,14 @@ void AppList::update()
 		int contentBottom = 0;
 		if (!appCards.empty())
 		{
+			// el fondo real de la tarjeta es lo mas bajo entre su alto y sus
+			// elementos (icono, nombre, version, estado); asi el texto de abajo
+			// nunca queda mas abajo de lo que se calcula
 			const AppCard& last = appCards.back();
-			contentBottom = last.y + last.height + 50/SCALER; // aire extra para ver completo nombre/version
+			int cardBottom = last.height;
+			for (const Element* child : last.elements)
+				cardBottom = std::max(cardBottom, child->y + child->height);
+			contentBottom = last.y + cardBottom + 70/SCALER; // aire extra para ver completo nombre/version
 		}
 		const int visibleBottom = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT;
 		this->lowerYScroll = std::min(0, visibleBottom - contentBottom);

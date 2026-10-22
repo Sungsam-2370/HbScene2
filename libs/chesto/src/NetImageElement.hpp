@@ -34,8 +34,16 @@ public:
 	bool loaded = false;
 	bool updateSizeAfterLoad = false;
 
+	/// true mientras falta comprobar/cargar el icono del cache en disco; con
+	/// immediateLoad = false eso se pospone hasta fetch() (antes se leia y
+	/// decodificaba de la SD el icono de TODAS las tarjetas al armar la lista,
+	/// aunque estuvieran fuera de pantalla).
+	bool pendingDiskLoad = false;
+
 private:
 	void imgDownloadComplete(DownloadOperation *download);
+	bool tryLoadFromDisk();
+	std::string imageKey; // clave de la cache de texturas (la URL)
 
 	DownloadOperation *imgDownload = nullptr;
 	Texture *imgFallback = nullptr;

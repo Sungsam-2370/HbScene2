@@ -1,6 +1,7 @@
 #ifndef MANIFEST_H_
 #define MANIFEST_H_
 #include <fstream>
+#include <memory>
 #include <regex>
 #include <string>
 #include <sys/stat.h>
@@ -48,11 +49,15 @@ public:
 
 	[[nodiscard]] const std::vector<ManifestState>& getEntries() const
 	{
-		return entries;
+		static const std::vector<ManifestState> kNoEntries;
+		return entries ? *entries : kNoEntries;
 	}
 
 private:
-	std::vector<ManifestState> entries;
+	// Las entradas se llenan una sola vez al construir el Manifest y despues
+	// no cambian, asi que se comparten entre copias (copiar un Package ya no
+	// copia miles de strings; antes cada copia duplicaba todo el manifest).
+	std::shared_ptr<std::vector<ManifestState>> entries;
 	bool valid = false;
 	bool fakeManifestPossible = false;
 

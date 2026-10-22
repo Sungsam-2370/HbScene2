@@ -44,6 +44,14 @@ public:
 
 	Package(const Package& other) = default;
 
+	// Como Package tiene destructor propio, el compilador NO genera las
+	// operaciones de "mover" por su cuenta: std::sort y los vectores copiaban
+	// cada Package completo en cada intercambio (muy lento con cientos de
+	// componentes). Se piden explicitamente.
+	Package(Package&& other) noexcept = default;
+	Package& operator=(const Package& other) = default;
+	Package& operator=(Package&& other) noexcept = default;
+
 	[[nodiscard]] std::string toString() const;
 	bool downloadZip(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
 	bool downloadZip2(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;

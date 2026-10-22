@@ -176,6 +176,25 @@ void TextElement::render(Element* parent)
 	Texture::render(parent);
 }
 
+// Fuentes ya abiertas, por (archivo, tamano). Abrir una fuente (TTF_OpenFont)
+// lee y procesa el archivo .ttf completo; antes se hacia para CADA texto nuevo
+// (varios por tarjeta de componente) y era una de las causas de que las listas
+// tardaran en dibujarse. Las fuentes se conservan abiertas hasta cerrar la app.
+static TTF_Font* getCachedFont(const char* fontPath, int size)
+{
+	static std::map<std::pair<std::string, int>, TTF_Font*> fontCache;
+
+	auto key = std::make_pair(std::string(fontPath), size);
+	auto it = fontCache.find(key);
+	if (it != fontCache.end())
+		return it->second;
+
+	TTF_Font* font = TTF_OpenFont(fontPath, size);
+	if (font)
+		fontCache[key] = font;
+	return font;
+}
+
 void TextElement::update(bool forceUpdate)
 {
 	// si hay un puntero de color vivo (vinculado al ThemeManager), releerlo ahora
@@ -222,7 +241,7 @@ void TextElement::update(bool forceUpdate)
 		if (customFontPath != "") {
 			fontPath = customFontPath.c_str();
 		}
-		TTF_Font* font = TTF_OpenFont(fontPath, textSize);
+		TTF_Font* font = getCachedFont(fontPath, textSize);
 
 		CST_Surface *textSurface = ((actualFont == ICON) || (textWrappedWidth == 0)) ?
 			TTF_RenderUTF8_Blended(font, text.c_str(), textColor) :
@@ -232,7 +251,7 @@ void TextElement::update(bool forceUpdate)
 		loadFromSurfaceSaveToCache(key, textSurface);
 
 		CST_FreeSurface(textSurface);
-		TTF_CloseFont(font);
+		// la fuente NO se cierra: queda en getCachedFont para reutilizarse
 	}
 
 	getTextureSize(&width, &height);

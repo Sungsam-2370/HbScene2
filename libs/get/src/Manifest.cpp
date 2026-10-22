@@ -1,6 +1,7 @@
 #include "Manifest.hpp"
 
 Manifest::Manifest(const std::vector<std::string>& paths, std::string_view root_path)
+	: entries(std::make_shared<std::vector<ManifestState>>())
 {
 	for (const auto& path : paths)
 	{
@@ -15,13 +16,14 @@ Manifest::Manifest(const std::vector<std::string>& paths, std::string_view root_
 		{
 			CurrentPath.extension = path.substr(idx + 1);
 		}
-		entries.push_back(CurrentPath);
+		entries->push_back(CurrentPath);
 	}
 	valid = true;
 	fakeManifestPossible = true;
 }
 
 Manifest::Manifest(std::string_view ManifestPath, std::string_view root_path)
+	: entries(std::make_shared<std::vector<ManifestState>>())
 {
 	fakeManifestPossible = true;
 	struct stat buf = {};
@@ -78,7 +80,7 @@ Manifest::Manifest(std::string_view ManifestPath, std::string_view root_path)
 					std::string::size_type idx = Path.rfind('.');
 					if (idx != std::string::npos)
 						CurrentLState.extension = Path.substr(idx + 1);
-					entries.push_back(CurrentLState);
+					entries->push_back(CurrentLState);
 				}
 			}
 			valid = true;
@@ -92,7 +94,7 @@ Manifest::Manifest(std::string_view ManifestPath, std::string_view root_path)
 std::vector<ManifestState> Manifest::regexMatchPath(std::string_view expression)
 {
 	std::vector<ManifestState> vec;
-	for (auto& entry : entries)
+	for (auto& entry : getEntries())
 	{
 		if (std::regex_match(entry.path, std::regex(expression.data())))
 		{

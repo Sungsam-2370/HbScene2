@@ -160,6 +160,17 @@ void AppCard::handleIconLoad()
 	iconFetch = true;
 }
 
+void AppCard::preloadIfVisible()
+{
+	if (!list)
+		return;
+
+	// handleIconLoad usa estos offsets (normalmente los fija process/render)
+	this->xOff = this->list->x;
+	this->yOff = this->list->y;
+	handleIconLoad();
+}
+
 void AppCard::render(Element* parent)
 {
 	this->xOff = parent->x;
