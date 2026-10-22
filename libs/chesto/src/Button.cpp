@@ -71,19 +71,26 @@ void Button::updateBounds()
 	else
 		backgroundColor = (rgb){ 0xee/255.0, 0xee/255.0, 0xee/255.0 };
 	
-	text.setColor(colors[dark]);
+	if (flat && flatTextColor)
+		text.setColorPtr(flatTextColor);
+	else
+		text.setColor(colors[dark]);
 	text.update();
 }
 
-void Button::setFlat(bool flatMode, bool lightContent)
+void Button::setFlat(bool flatMode, bool lightContent, CST_Color* textColor)
 {
-	if (flat == flatMode && dark == lightContent)
+	if (flat == flatMode && dark == lightContent && flatTextColor == textColor)
 		return;
 
 	flat = flatMode;
 	dark = lightContent;
+	flatTextColor = textColor;
 	hasBackground = !flat;
-	text.setColor(colors[dark]);
+	if (flat && flatTextColor)
+		text.setColorPtr(flatTextColor);
+	else
+		text.setColor(colors[dark]);
 	text.update();
 
 	// fuerza a process() a recargar el icono con la variante de color correcta

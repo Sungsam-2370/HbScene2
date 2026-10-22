@@ -63,6 +63,11 @@ public:
 	// coordenadas, sin importar cuanto haya scrolleado la lista de tarjetas.
 	void positionChrome();
 
+#if defined(MUSIC)
+	// actualiza el texto "reproduciendo ahora" segun el estado de la musica
+	void updateNowPlayingText();
+#endif
+
 private:
 	bool sortCompare(const Package& left, const Package& right);
 	std::random_device randDevice;

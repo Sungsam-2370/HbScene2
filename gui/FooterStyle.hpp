@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <cstdlib>
 
+// tamano del texto de los botones de la barra inferior (antes 13)
+#define FOOTER_BTN_TEXT_SIZE 16
+
 // grosor de la linea que separa la barra inferior del area de componentes
 #define SIDEBAR_FOOTER_LINE (3/SCALER)
 
@@ -24,6 +27,13 @@ inline int luminance(const CST_Color& c)
 inline bool contentIsLight()
 {
 	return luminance(HBAS::ThemeManager::sidebarFooterBg) < 140;
+}
+
+// true si el texto del tema (el mismo del menu lateral) es claro -> los iconos
+// de los botones de la barra deben ser los claros
+inline bool iconsLight()
+{
+	return luminance(HBAS::ThemeManager::textPrimary) >= 140;
 }
 
 // Color de la linea superior: el del fondo del titulo (nombre + version del

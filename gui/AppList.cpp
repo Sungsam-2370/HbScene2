@@ -36,18 +36,18 @@ CST_Color AppList::lighterRed = { 0xef, 0x48, 0x48, 0xff };
 AppList::AppList(Get* get, Sidebar* sidebar)
 	: get(get)			// the main get instance that contains repo info and stuff
 	, sidebar(sidebar)	// the sidebar, which will store the currently selected category info
-	, quitBtn(i18n("listing.quit"), SELECT_BUTTON, false, 13, 0, 1.8f)
-	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, 13, 0, 1.8f)
-	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, 13, 0, 1.8f)
-	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, 13, 0, 1.8f)
+	, quitBtn(i18n("listing.quit"), SELECT_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
+	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
+	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
+	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
 	, nowPlayingText(" ", 16, &HBAS::ThemeManager::textPrimary)
 #if defined(MUSIC)
 	, nowPlayingIcon(RAMFS "res/nowplaying.png")
-	, muteBtn(" ", X_BUTTON, false, 13, 100, 1.8f)
+	, muteBtn(" ", X_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 100, 1.8f)
 	, muteIcon(RAMFS "res/mute.png")
 	, unmuteIcon(RAMFS "res/unmute.png")
 #endif
-	, toolsBtn("Herramientas", R_BUTTON, false, 13, 0, 1.8f)
+	, toolsBtn("Herramientas", R_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
 {
 	this->x = 400/SCALER - 260/SCALER * hideSidebar;
 	sidebar->width = this->x - 35/SCALER; // width of the sidebar is space between edge and applist
@@ -366,7 +366,11 @@ void AppList::render(Element* parent)
 	// recortan para que nunca dibujen encima de la franja inferior al
 	// scrollear. El chrome se renderiza aparte, despues, sin recorte y
 	// por encima de la franja - por eso nunca queda tapado.
-	CST_Rect clip = { dimens.x, 0, SCREEN_WIDTH - dimens.x, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT };
+	// Arriba el recorte termina justo debajo del titulo de la seccion, para que
+	// las tarjetas que suben al scrollear desaparezcan antes de llegar al texto.
+	const int clipTop = std::max(0, std::max(category.y + category.height,
+	                                          sortBlurb.y + sortBlurb.height) + 8/SCALER);
+	CST_Rect clip = { dimens.x, clipTop, SCREEN_WIDTH - dimens.x, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT - clipTop };
 	SDL_RenderSetClipRect(RootDisplay::renderer, &clip);
 	for (Element* subelement : elements)
 		if (!subelement->isAbsolute)
@@ -536,7 +540,7 @@ void AppList::update()
 		if (!appCards.empty())
 		{
 			const AppCard& last = appCards.back();
-			contentBottom = last.y + last.height + 15;
+			contentBottom = last.y + last.height + 40/SCALER; // aire extra para ver completo nombre/version
 		}
 		const int visibleBottom = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT;
 		this->lowerYScroll = std::min(0, visibleBottom - contentBottom);
@@ -598,6 +602,25 @@ void AppList::update()
 	auto rootDisplay = RootDisplay::mainDisplay;
 
 #if defined(MUSIC)
+	updateNowPlayingText();
+
+	// now playing text (or applet warning)
+	super::append(&nowPlayingText);
+#endif
+
+	// Con todos los botones/elementos ya agregados y con su texto final
+	// (el ancho del texto puede haber cambiado), se calculan sus posiciones
+	// definitivas: titulo arriba fijo, botones abajo en la franja compartida.
+	positionChrome();
+
+	needsUpdate = false;
+}
+
+#if defined(MUSIC)
+void AppList::updateNowPlayingText()
+{
+	auto rootDisplay = RootDisplay::mainDisplay;
+
 	if (rootDisplay->music) {
 		if (!Mix_PausedMusic()) {
 			// music is playing, get the title and artist 
@@ -624,18 +647,8 @@ void AppList::update()
 	}
 
 	nowPlayingText.update();
-
-	// now playing text (or applet warning)
-	super::append(&nowPlayingText);
-#endif
-
-	// Con todos los botones/elementos ya agregados y con su texto final
-	// (el ancho del texto puede haber cambiado), se calculan sus posiciones
-	// definitivas: titulo arriba fijo, botones abajo en la franja compartida.
-	positionChrome();
-
-	needsUpdate = false;
 }
+#endif
 
 void AppList::positionChrome()
 {
@@ -656,16 +669,18 @@ void AppList::positionChrome()
 	// botones sin recuadro: solo icono + texto sobre el fondo de la barra,
 	// con colores claros u oscuros segun el fondo del tema activo
 	{
-		const bool light = FooterStyle::contentIsLight();
-		quitBtn.setFlat(true, light);
-		sortBtn.setFlat(true, light);
-		keyboardBtn.setFlat(true, light);
-		backspaceBtn.setFlat(true, light);
-		toolsBtn.setFlat(true, light);
+		// el texto usa EXACTAMENTE el mismo color que el texto del menu lateral
+		// (textPrimary, por puntero: sigue los cambios de tema); los iconos del
+		// control se eligen claros u oscuros segun ese mismo color
+		const bool light = FooterStyle::iconsLight();
+		CST_Color* textColor = &HBAS::ThemeManager::textPrimary;
+		quitBtn.setFlat(true, light, textColor);
+		sortBtn.setFlat(true, light, textColor);
+		keyboardBtn.setFlat(true, light, textColor);
+		backspaceBtn.setFlat(true, light, textColor);
+		toolsBtn.setFlat(true, light, textColor);
 #if defined(MUSIC)
-		muteBtn.setFlat(true, light);
-		nowPlayingText.setColor(light ? CST_Color{0xff, 0xff, 0xff, 0xff} : CST_Color{0x00, 0x00, 0x00, 0xff});
-		nowPlayingText.update();
+		muteBtn.setFlat(true, light, textColor);
 #endif
 	}
 
@@ -761,8 +776,16 @@ void AppList::toggleAudio()
 		soundFile.flush();
 	}
 
-	// redraw everything
-	update();
+	// Solo se refresca lo que cambia (icono de sonido + texto "reproduciendo").
+	// Antes se llamaba a update(), que reconstruye TODAS las tarjetas de
+	// componentes (ordenar, crear, posicionar...) y por eso el boton tardaba
+	// en responder.
+	super::remove(&muteIcon);
+	super::remove(&unmuteIcon);
+	if (RootDisplay::mainDisplay->music)
+		Mix_PausedMusic() ? super::append(&muteIcon) : super::append(&unmuteIcon);
+	updateNowPlayingText();
+	positionChrome();
 #endif
 }
 

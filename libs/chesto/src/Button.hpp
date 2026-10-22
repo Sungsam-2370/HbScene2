@@ -28,8 +28,10 @@ public:
 
 	// boton "plano": sin recuadro de fondo, solo icono + texto sobre lo que
 	// haya detras. lightContent = true -> texto/iconos claros (fondo oscuro).
-	void setFlat(bool flatMode, bool lightContent);
+	// textColor (opcional): color del texto por puntero (sigue los cambios de tema)
+	void setFlat(bool flatMode, bool lightContent, CST_Color* textColor = nullptr);
 	bool flat = false;
+	CST_Color* flatTextColor = nullptr;
 	
 private:
 	static CST_Color colors[2];
