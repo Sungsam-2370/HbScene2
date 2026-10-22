@@ -2,9 +2,49 @@
 #include "InstallEngine.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <sys/stat.h>
 
 namespace nspinstall {
+
+bool DeleteInstallFile(const std::string &root_path, const std::string &relative_nsp_path) {
+    if (relative_nsp_path.empty()) {
+        return true;
+    }
+
+    // nunca salir de la raiz de la SD
+    if (relative_nsp_path.find("..") != std::string::npos) {
+        printf("[nspinstall] ruta de instalacion sospechosa, no se borra: %s\n", relative_nsp_path.c_str());
+        return false;
+    }
+
+    std::string clean = relative_nsp_path;
+    while (!clean.empty() && clean.front() == '/') {
+        clean.erase(0, 1);
+    }
+    if (clean.empty() || clean.back() == '/') {
+        return false; // es una carpeta, no un archivo
+    }
+
+    std::string root = root_path;
+    if (!root.empty() && root.back() != '/') {
+        root += '/';
+    }
+    const std::string full_path = root + clean;
+
+    struct stat st{};
+    if (stat(full_path.c_str(), &st) != 0) {
+        return true; // ya no existe
+    }
+    if (S_ISDIR(st.st_mode)) {
+        printf("[nspinstall] %s es una carpeta, no se borra\n", full_path.c_str());
+        return false;
+    }
+
+    const bool ok = (std::remove(full_path.c_str()) == 0);
+    printf("[nspinstall] borrar %s: %s\n", full_path.c_str(), ok ? "OK" : "FALLO");
+    return ok;
+}
 
 AutoInstallResult InstallNspIfRequested(const std::string &root_path,
                                          const std::string &relative_nsp_path,

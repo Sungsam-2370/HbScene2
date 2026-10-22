@@ -175,6 +175,21 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 		if (cur.HasMember("instalacion"))
 			package->install_nsp = cur["instalacion"].GetString();
 
+		// aviso que se muestra ANTES de descargar; el usuario debe confirmar
+		// (A / touch) o cancelar (B / touch). Si no existe, no se muestra nada.
+		if (cur.HasMember("aviso") && cur["aviso"].IsString())
+			package->notice = std::regex_replace(cur["aviso"].GetString(), std::regex("\\\\n"), "\n");
+
+		// actualizacion incremental: URL de un zip con SOLO lo que cambio, mas
+		// el info.json y el manifest.install nuevos. Si no existe, las
+		// actualizaciones descargan los zips completos como siempre.
+		if (cur.HasMember("actualizacion") && cur["actualizacion"].IsString())
+			package->update_url = cur["actualizacion"].GetString();
+		// (opcional) version instalada desde la que aplica ese zip; si la
+		// version instalada es otra se descarga el zip completo
+		if (cur.HasMember("actualizacion_desde") && cur["actualizacion_desde"].IsString())
+			package->update_base = cur["actualizacion_desde"].GetString();
+
 		// instruccion final post-instalacion; solo se setea si el paquete
 		// realmente trae esta linea -- si no existe, queda vacio a proposito
 		if (cur.HasMember("mensaje"))

@@ -53,6 +53,13 @@ public:
 	bool install2(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 2, int zipTotal = 2);
 	bool install3(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 3, int zipTotal = 3);
 	bool install4(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 4, int zipTotal = 4);
+	// --- actualizacion incremental ("actualizacion" en repo.json) ---
+	static constexpr int UPDATE_OK = 0;       // actualizado
+	static constexpr int UPDATE_FALLBACK = 1; // el zip incremental no sirve: usar la descarga completa
+	static constexpr int UPDATE_FAILED = 2;   // error real (disco, escritura...)
+	bool downloadUpdateZip(std::string_view tmp_path) const;
+	int installUpdate(const std::string& pkg_path, const std::string& tmp_path);
+
 	bool remove(std::string_view pkg_path);
 	[[nodiscard]] const char* statusString() const;
 	[[nodiscard]] const char* statusStringDisplay() const;
@@ -113,11 +120,38 @@ public:
 		return install_message;
 	}
 
+	// aviso a mostrar antes de descargar ("aviso" en repo.json). Vacio = sin aviso.
+	[[nodiscard]] const std::string& getNotice() const
+	{
+		return notice;
+	}
+
+	// URL del zip de actualizacion incremental ("actualizacion"). Vacio = no hay.
+	[[nodiscard]] const std::string& getUpdateUrl() const
+	{
+		return update_url;
+	}
+
+	// true si, al actualizar, se puede usar el zip incremental en vez de los zips completos
+	[[nodiscard]] bool canUseUpdateZip() const
+	{
+		if (update_url.empty())
+			return false;
+		// si el repo indica desde que version aplica, la version instalada debe coincidir
+		return update_base.empty() || update_base == installed_version;
+	}
+
 	// Resultado (en tiempo de ejecucion) del intento de instalar el NSP.
 	// Lo llena AppDetails::proceed() despues de la instalacion; vacio si
 	// no habia orden de instalacion para este paquete. No viene de
 	// repo.json, por eso vive fuera del bloque "private + friend".
 	std::string runtime_install_status;
+
+	// true si la ultima instalacion de este paquete se hizo con el zip de
+	// actualizacion incremental ("actualizacion"). En ese caso el zip solo trae
+	// lo que cambio, asi que el archivo de "instalacion" puede no venir en el zip
+	// (ya se instalo y se borro en la version anterior): no hay nada que instalar.
+	bool runtime_used_delta = false;
 
 	[[nodiscard]] const std::string& getVersion() const
 	{
@@ -206,6 +240,10 @@ private:
 	                          // instala nada.
 	std::string install_message; // "mensaje"/"message" en repo.json:
 	                              // instruccion final post-instalacion.
+	std::string notice;       // "aviso" en repo.json
+	std::string update_url;   // "actualizacion" en repo.json
+	std::string update_base;  // "actualizacion_desde" en repo.json (opcional)
+	std::string installed_version; // version leida del info.json instalado (lo llena updateStatus)
 	std::string iconUrl;
 
 	std::string updated;

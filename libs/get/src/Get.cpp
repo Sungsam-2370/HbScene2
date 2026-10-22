@@ -80,6 +80,34 @@ int Get::install(Package& package, bool resume)
 	// salir de esta funcion, sin importar el camino de salida)
 	NoSleepGuard noSleepGuard;
 
+	package.runtime_used_delta = false;
+
+	// actualizacion incremental: si el paquete ya esta instalado, hay una version
+	// nueva y el repo trae la linea "actualizacion", se baja solo el zip con los
+	// cambios. Si ese zip no sirve (no se pudo bajar, no es valido, faltan archivos
+	// porque el usuario se salto una version...) se sigue con la descarga completa.
+	if (package.getStatus() == UPDATE && package.canUseUpdateZip())
+	{
+		printf("--> Trying the incremental update for [%s]\n", package.getPackageName().c_str());
+
+		int deltaResult = Package::UPDATE_FALLBACK;
+		if (package.downloadUpdateZip(mTmp_path))
+			deltaResult = package.installUpdate(mPkg_path, mTmp_path);
+		else
+			printf("--> Could not download the update zip\n");
+
+		if (deltaResult == Package::UPDATE_OK || deltaResult == Package::UPDATE_FAILED)
+		{
+			networking_callback = nullptr;
+			networking_callback_data = nullptr;
+			package.runtime_used_delta = (deltaResult == Package::UPDATE_OK);
+			update();
+			return deltaResult == Package::UPDATE_OK;
+		}
+
+		printf("--> Incremental update not usable, doing the full download\n");
+	}
+
 	// calcular cuantos zips existen en total para este paquete (1 a 4)
 	int zipTotal = 1;
 	if (!package.zipUrl2.empty()) zipTotal++;

@@ -24,6 +24,12 @@ using AutoInstallProgress = std::function<void(std::uint64_t, std::uint64_t, con
 //                    (ej. "forwarders/Emuladores/DrasticDS/DrasticDS.nsp")
 // install_to_nand: si el usuario tiene activada la opción de instalar a NAND
 //                  en vez de SD (misma idea que config->install_to_nand en BrowseTab)
+// Borra SOLO el archivo indicado por "instalacion" (ruta relativa a root_path),
+// se haya instalado bien o no. Devuelve true si el archivo ya no existe al
+// terminar (borrado ahora, o no existia). Nunca toca otros archivos ni carpetas:
+// rechaza rutas vacias o con "..".
+bool DeleteInstallFile(const std::string &root_path, const std::string &relative_nsp_path);
+
 AutoInstallResult InstallNspIfRequested(const std::string &root_path,
                                          const std::string &relative_nsp_path,
                                          bool install_to_nand,

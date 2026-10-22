@@ -712,6 +712,236 @@ bool Package::install4(const std::string& pkg_path, const std::string& tmp_path,
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Actualizacion incremental ("actualizacion" en repo.json)
+//
+// El zip de actualizacion trae SOLO los archivos que cambiaron, mas:
+//   - info.json         (con la version nueva)
+//   - manifest.install  (con TODOS los componentes del paquete, no solo los nuevos)
+//
+// Los archivos que aparecen en el manifest nuevo pero no vienen en el zip se
+// consideran sin cambios y se dejan como estan en la SD.
+// ---------------------------------------------------------------------------
+bool Package::downloadUpdateZip(std::string_view tmp_path) const
+{
+	if (this->update_url.empty())
+		return false;
+
+	if (libget_status_callback != nullptr)
+		libget_status_callback(STATUS_DOWNLOADING, 1, 1);
+
+	printf("--> Downloading update zip for %s\n", this->pkg_name.c_str());
+
+	std::string downloadPath = std::string(tmp_path) + this->pkg_name + "_upd.zip";
+
+	// never resume an old partial: always start clean
+	std::remove(getMetadataPath(downloadPath).c_str());
+	std::remove(downloadPath.c_str());
+
+	download_metadata_t metadata = {};
+	bool success = downloadFileToDiskWithMetadata(this->update_url, downloadPath, false, &metadata);
+	if (!success)
+		std::remove(downloadPath.c_str());
+
+	return success;
+}
+
+int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_path)
+{
+	printf("Going to install the update zip for %s\n", this->pkg_name.c_str());
+
+	if (libget_status_callback != nullptr)
+		libget_status_callback(STATUS_ANALYZING, 1, 1);
+	if (networking_callback != nullptr)
+		networking_callback(nullptr, 1.0);
+
+	const std::string zipPath = tmp_path + this->pkg_name + "_upd.zip";
+
+	// delete the downloaded zip when we leave, whatever happens
+	struct ZipGuard
+	{
+		const std::string& path;
+		~ZipGuard() { std::remove(path.c_str()); }
+	} zipGuard{ zipPath };
+
+	struct stat sbuff = {};
+	if (stat(zipPath.c_str(), &sbuff) != 0 || sbuff.st_size == 0)
+	{
+		printf("--> Update zip is missing or empty\n");
+		return UPDATE_FALLBACK;
+	}
+
+	const std::string pkgDir = pkg_path + this->pkg_name + "/";
+	const std::string manifestPath = pkgDir + "manifest.install";
+	const std::string infoPath = pkgDir + "info.json";
+	// the new files are written next to the real ones and only swapped in at the very end,
+	// so a bad update zip never leaves the package with a half-new manifest/version
+	const std::string newManifestPath = manifestPath + ".new";
+	const std::string newInfoPath = infoPath + ".new";
+
+	auto cleanupStaging = [&]()
+	{
+		std::remove(newManifestPath.c_str());
+		std::remove(newInfoPath.c_str());
+	};
+
+	// we can only update something that is installed (and knows its files)
+	Manifest oldManifest(manifestPath, ROOT_PATH);
+	if (!oldManifest.isValid())
+	{
+		printf("--> No valid installed manifest, cannot apply an incremental update\n");
+		return UPDATE_FALLBACK;
+	}
+
+	UnZip zip(zipPath);
+	if (!zip.IsValid())
+	{
+		printf("--> Update file is not a valid zip (server error page?)\n");
+		return UPDATE_FALLBACK;
+	}
+
+	if (zip.ExtractFile("manifest.install", newManifestPath) != 0 || zip.ExtractFile("info.json", newInfoPath) != 0)
+	{
+		printf("--> Update zip must contain manifest.install and info.json\n");
+		cleanupStaging();
+		return UPDATE_FALLBACK;
+	}
+
+	Manifest newManifest(newManifestPath, ROOT_PATH);
+	if (!newManifest.isValid())
+	{
+		printf("--> Update zip has an invalid manifest.install\n");
+		cleanupStaging();
+		return UPDATE_FALLBACK;
+	}
+
+	// the version inside the new info.json must be the one the repo advertises,
+	// otherwise the package would keep showing "update available" forever
+	{
+		std::ifstream ifs(newInfoPath.c_str());
+		rapidjson::IStreamWrapper isw(ifs);
+		rapidjson::Document doc;
+		rapidjson::ParseResult ok = doc.ParseStream(isw);
+		std::string newVersion;
+		if (ok && doc.IsObject() && doc.HasMember("version") && doc["version"].IsString())
+			newVersion = doc["version"].GetString();
+
+		if (newVersion != this->version)
+		{
+			printf("--> Update zip version (%s) doesn't match the repo version (%s)\n", newVersion.c_str(),
+				   this->version.c_str());
+			cleanupStaging();
+			return UPDATE_FALLBACK;
+		}
+	}
+
+	auto infoMap = zip.GetPathToFilePosMapping();
+
+	// the file of the "instalacion" order (.nsp/.nsz/.xci) is deleted from the SD
+	// right after it is installed, so it is never "already on the SD card"
+	std::string installFilePath;
+	if (!this->install_nsp.empty())
+	{
+		std::string rel = this->install_nsp;
+		while (!rel.empty() && rel.front() == '/')
+			rel.erase(0, 1);
+		installFilePath = std::string(ROOT_PATH) + rel;
+	}
+
+	// every file of the new manifest has to be either in this zip (changed) or
+	// already on the SD card (unchanged). If not, the user skipped a version and
+	// this partial update isn't enough: use the full download instead.
+	for (const auto& entry : newManifest.getEntries())
+	{
+		if (entry.operation != MEXTRACT && entry.operation != MUPDATE && entry.operation != MGET)
+			continue;
+		if (infoMap.find(entry.zip_path) != infoMap.end())
+			continue;
+		if (!installFilePath.empty() && entry.path == installFilePath)
+			continue; // already installed and deleted: nothing to check
+
+		struct stat fileStat = {};
+		if (stat(entry.path.c_str(), &fileStat) != 0)
+		{
+			printf("--> File [%s] is neither in the update zip nor on the SD card, need the full download\n",
+				   entry.path.c_str());
+			cleanupStaging();
+			return UPDATE_FALLBACK;
+		}
+	}
+
+	if (libget_status_callback != nullptr)
+		libget_status_callback(STATUS_INSTALLING, 1, 1);
+
+	std::unordered_set<std::string> incoming_paths;
+	const auto& entries = newManifest.getEntries();
+	int i = 0;
+	for (const auto& entry : entries)
+	{
+		if (networking_callback != nullptr)
+			networking_callback(nullptr, (double)(i + 1) / (double)entries.size());
+		i++;
+
+		incoming_paths.insert(entry.path);
+
+		auto found = infoMap.find(entry.zip_path);
+		if (found == infoMap.end())
+			continue; // unchanged, keep the file that is already installed
+
+		int resp = 0;
+		switch (entry.operation)
+		{
+		case MEXTRACT:
+		case MUPDATE:
+			resp = zip.Extract(entry.path, found->second);
+			break;
+		case MGET:
+		{
+			struct stat fileStat = {};
+			if (stat(entry.path.c_str(), &fileStat) != 0)
+				resp = zip.Extract(entry.path, found->second);
+			break;
+		}
+		default:
+			break;
+		}
+
+		if (resp < 0)
+		{
+			printf("--> Some issue happened while applying the update! Error: %d\n", resp);
+			cleanupStaging();
+			return UPDATE_FAILED;
+		}
+	}
+
+	// files that were part of the old version but are not in the new manifest are gone
+	for (const auto& entry : oldManifest.getEntries())
+	{
+		if ((entry.operation == MUPDATE || entry.operation == MEXTRACT) && incoming_paths.find(entry.path) == incoming_paths.end())
+			std::remove(entry.path.c_str());
+	}
+
+	// swap in the new manifest first and info.json (the version marker) last
+	std::remove(manifestPath.c_str());
+	if (rename(newManifestPath.c_str(), manifestPath.c_str()) != 0)
+	{
+		printf("--> Could not write the new manifest\n");
+		cleanupStaging();
+		return UPDATE_FAILED;
+	}
+	std::remove(infoPath.c_str());
+	if (rename(newInfoPath.c_str(), infoPath.c_str()) != 0)
+	{
+		printf("--> Could not write the new info.json\n");
+		cleanupStaging();
+		return UPDATE_FAILED;
+	}
+
+	this->manifest = Manifest(manifestPath, ROOT_PATH);
+	printf("--> Incremental update applied for %s\n", this->pkg_name.c_str());
+	return UPDATE_OK;
+}
+
 bool Package::remove(std::string_view pkg_path)
 {
 	if (libget_status_callback != nullptr)
@@ -870,6 +1100,8 @@ void Package::updateStatus(const std::string& pkg_path)
 		}
 		else
 			tmpVersion = "0.0.0";
+
+		this->installed_version = tmpVersion;
 
 		if (tmpVersion != this->version)
 			this->status = UPDATE;
