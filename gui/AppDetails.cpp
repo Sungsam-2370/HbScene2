@@ -230,6 +230,17 @@ void AppDetails::proceed()
 {
 	if (this->operating) return;
 
+	// Si el paquete trae la linea "aviso" en repo.json, se muestra antes de
+	// descargar: A / touch en "Aceptar" confirma, B / touch en "Cancelar" cancela.
+	// (al desinstalar no hace falta)
+	if (this->package->getStatus() != INSTALLED && !this->package->getNotice().empty())
+	{
+		bool confirmed = ((MainDisplay*)RootDisplay::mainDisplay)->showFullscreenPrompt(
+			"Aviso", this->package->getNotice(), true);
+		if (!confirmed)
+			return;
+	}
+
 	this->operating = true;
 	// event->update();
 
@@ -258,6 +269,13 @@ void AppDetails::proceed()
 		// libget_status_callback, arriba).
 		succeeded = (get->install(*package) != 0);
 
+#if defined(SWITCH)
+		// si la descarga o la extraccion fallaron a medias, el archivo de
+		// "instalacion" (si llego a extraerse) tampoco se necesita: se borra solo ese archivo
+		if (!succeeded && !package->getInstallNsp().empty())
+			nspinstall::DeleteInstallFile(ROOT_PATH, package->getInstallNsp());
+#endif
+
 		// save the icon to the SD card, for offline use
 		if (appCard != NULL) {
 			// IMPORTANTE: el caché LOCAL del icono se guarda como PNG
@@ -278,7 +296,23 @@ void AppDetails::proceed()
 		// Paso explicito y SEPARADO de la descarga/extraccion de arriba.
 		// Solo corre si el paso 1+2 salio bien y el paquete realmente
 		// trae la clave "instalacion" en su repo.json.
-		if (succeeded && !package->getInstallNsp().empty())
+		bool nspStepNeeded = succeeded && !package->getInstallNsp().empty();
+		if (nspStepNeeded && package->runtime_used_delta)
+		{
+			// actualizacion incremental: el zip solo trae lo que cambio. Si el
+			// archivo de "instalacion" no vino en el zip, no hay nada nuevo que
+			// instalar (no es un error).
+			std::string rel = package->getInstallNsp();
+			while (!rel.empty() && rel.front() == '/')
+				rel.erase(0, 1);
+			struct stat nspStat = {};
+			if (stat((std::string(ROOT_PATH) + rel).c_str(), &nspStat) != 0)
+			{
+				printf("--> Actualizacion incremental sin archivo de instalacion, se omite ese paso\n");
+				nspStepNeeded = false;
+			}
+		}
+		if (nspStepNeeded)
 		{
 			// pantalla propia: reusamos los mismos elementos de
 			// descarga/extraccion (misma barra, mismo estilo), solo
@@ -343,6 +377,10 @@ void AppDetails::proceed()
 			ncmExit();
 			splCryptoExit();
 			splExit();
+
+			// Ya intentamos instalar (bien o mal): el .nsp/.nsz/.xci extraido
+			// ya no se necesita en la SD, asi que se borra SOLO ese archivo.
+			nspinstall::DeleteInstallFile(ROOT_PATH, package->getInstallNsp());
 
 			package->runtime_install_status = nspResult.message;
 			printf("--> Instalacion de NSP [%s]: %s\n",
