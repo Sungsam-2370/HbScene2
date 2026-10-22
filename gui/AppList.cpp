@@ -540,7 +540,7 @@ void AppList::update()
 		if (!appCards.empty())
 		{
 			const AppCard& last = appCards.back();
-			contentBottom = last.y + last.height + 40/SCALER; // aire extra para ver completo nombre/version
+			contentBottom = last.y + last.height + 50/SCALER; // aire extra para ver completo nombre/version
 		}
 		const int visibleBottom = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT;
 		this->lowerYScroll = std::min(0, visibleBottom - contentBottom);
@@ -617,6 +617,23 @@ void AppList::update()
 }
 
 #if defined(MUSIC)
+void AppList::tintAudioIcons()
+{
+	// los iconos de sonido son de un solo color (oscuro); se pintan con el
+	// mismo color del texto del tema para que se lean sobre la barra
+	const CST_Color c = HBAS::ThemeManager::textPrimary;
+	if (iconTinted && c.r == iconTint.r && c.g == iconTint.g && c.b == iconTint.b)
+		return;
+
+	muteIcon.loadTinted(RAMFS "res/mute.png", c);
+	unmuteIcon.loadTinted(RAMFS "res/unmute.png", c);
+	muteIcon.resize(38, 38);
+	unmuteIcon.resize(38, 38);
+
+	iconTint = c;
+	iconTinted = true;
+}
+
 void AppList::updateNowPlayingText()
 {
 	auto rootDisplay = RootDisplay::mainDisplay;
@@ -681,6 +698,7 @@ void AppList::positionChrome()
 		toolsBtn.setFlat(true, light, textColor);
 #if defined(MUSIC)
 		muteBtn.setFlat(true, light, textColor);
+		tintAudioIcons();
 #endif
 	}
 

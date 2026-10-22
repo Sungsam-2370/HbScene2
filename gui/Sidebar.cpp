@@ -35,7 +35,9 @@ Sidebar::Sidebar()
 	// elements 0 through TOTAL_CATS are the sidebar texts (for highlighting)
 	for (int x = 0; x < TOTAL_CATS; x++)
 	{
-		category[x].icon = new ImageElement((std::string(RAMFS "res/") + cat_value[x] + ".png").c_str());
+		// "NxMasters" todavia no tiene icono propio: usa el mismo de "Ports"
+		const std::string iconName = (std::string(cat_value[x]) == "NxMasters") ? "Ports" : cat_value[x];
+		category[x].icon = new ImageElement((std::string(RAMFS "res/") + iconName + ".png").c_str());
 		category[x].icon->resize(40/SCALER, 40/SCALER);
 		category[x].icon->position(30/SCALER, 150/SCALER + x * 70/SCALER - 5/SCALER - scrollOffset);
 		super::append(category[x].icon);
@@ -124,26 +126,34 @@ Sidebar::~Sidebar()
 
 void Sidebar::addHints()
 {
-	if (hider == nullptr) {
-		// small indicator to switch to advanced view using L
-		hider = new ImageElement(Button::getControllerButtonImageForPlatform(L_BUTTON, false, false));
-		hider->resize(20/SCALER, 20/SCALER);
-		super::append(hider);
+	// Texto e icono con el mismo tamano y estilo que los botones de la barra
+	// inferior (AppList): mismo tamano de letra, icono = 1.8 x alto del texto,
+	// color del texto igual al del resto del menu.
+	if (hint == nullptr) {
+		hint = new TextElement(i18n("sidebar.hide"), FOOTER_BTN_TEXT_SIZE/SCALER, &HBAS::ThemeManager::textPrimary);
+		super::append(hint);
 	}
 
-	if (hint == nullptr) {
-		hint = new TextElement(i18n("sidebar.hide"), 15, &HBAS::ThemeManager::textSecondary);
-		super::append(hint);
+	if (hider == nullptr) {
+		// small indicator to switch to advanced view using L
+		// (variante clara u oscura del icono segun el color del texto del tema)
+		hider = new ImageElement(Button::getControllerButtonImageForPlatform(L_BUTTON, !FooterStyle::iconsLight(), false));
+		const int iconSize = (int)(hint->height * 1.8f);
+		hider->resize(iconSize, iconSize);
+		super::append(hider);
 	}
 
 	// Position both elements at the bottom of the sidebar, vertically
 	// centered within la franja inferior (ahora mas alta que antes).
-	const int bottomY = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT / 2 - hint->height / 2;
+	// centro vertical de la barra (debajo de la linea superior), el mismo
+	// que usan los botones de AppList
+	const int centerY = SCREEN_HEIGHT - (SIDEBAR_FOOTER_HEIGHT - SIDEBAR_FOOTER_LINE) / 2;
 	// Center the icon and text horizontally in the sidebar
-	const int totalWidth = hider->width + 5/SCALER + hint->width;
+	const int gapX = 10/SCALER;
+	const int totalWidth = hider->width + gapX + hint->width;
 	const int iconX = (width - totalWidth) / 2;
-	hider->position(iconX, bottomY);
-	hint->position(iconX + hider->width + 5/SCALER, bottomY + 2);
+	hider->position(iconX, centerY - hider->height / 2);
+	hint->position(iconX + hider->width + gapX, centerY - hint->height / 2);
 
 	// Make sure both are visible (they may have been hidden when sidebar collapsed)
 	hider->unhide();
@@ -163,8 +173,8 @@ void Sidebar::setCollapsed(bool collapsed)
 		// pero el icono se mantiene siempre visible y centrado
 		hint->hide();
 		hider->unhide();
-		const int bottomY = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT / 2 - hider->height / 2;
-		hider->position((width - hider->width) / 2, bottomY);
+		const int centerY = SCREEN_HEIGHT - (SIDEBAR_FOOTER_HEIGHT - SIDEBAR_FOOTER_LINE) / 2;
+		hider->position((width - hider->width) / 2, centerY - hider->height / 2);
 	}
 	else
 	{

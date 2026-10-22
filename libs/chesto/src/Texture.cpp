@@ -320,6 +320,55 @@ bool Texture::saveToJpg(std::string &path, int quality)
 	return ok;
 }
 
+bool Texture::loadTinted(const std::string& path, const CST_Color& color)
+{
+	CST_Surface* raw = IMG_Load(path.c_str());
+	if (!raw)
+		return false;
+
+	CST_Surface* surface = SDL_ConvertSurfaceFormat(raw, SDL_PIXELFORMAT_RGBA32, 0);
+	CST_FreeSurface(raw);
+	if (!surface)
+		return false;
+
+	// buscar si hay transparencia; sin ella no se toca la imagen
+	bool hasTransparency = false;
+	for (int y = 0; y < surface->h && !hasTransparency; y++)
+	{
+		Uint32* row = (Uint32*)((Uint8*)surface->pixels + y * surface->pitch);
+		for (int x = 0; x < surface->w; x++)
+		{
+			Uint8 r, g, b, a;
+			SDL_GetRGBA(row[x], surface->format, &r, &g, &b, &a);
+			if (a < 0xff) { hasTransparency = true; break; }
+		}
+	}
+
+	if (hasTransparency)
+	{
+		for (int y = 0; y < surface->h; y++)
+		{
+			Uint32* row = (Uint32*)((Uint8*)surface->pixels + y * surface->pitch);
+			for (int x = 0; x < surface->w; x++)
+			{
+				Uint8 r, g, b, a;
+				SDL_GetRGBA(row[x], surface->format, &r, &g, &b, &a);
+				row[x] = SDL_MapRGBA(surface->format, color.r, color.g, color.b, a);
+			}
+		}
+	}
+
+	bool ok = loadFromSurface(surface);
+	CST_FreeSurface(surface);
+
+	if (ok)
+	{
+		width = texW;
+		height = texH;
+	}
+	return ok;
+}
+
 void Texture::loadPath(std::string& path, bool forceReload) {
 	if (forceReload || !loadFromCache(path))
 	{

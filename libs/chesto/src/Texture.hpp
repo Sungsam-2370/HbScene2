@@ -72,6 +72,13 @@ public:
 	/// update and load or reload the texture
 	void loadPath(std::string& path, bool forceReload = false);
 
+	/// Carga la imagen de 'path' pintando todos sus pixeles con 'color' pero
+	/// conservando la transparencia (sirve para iconos de un solo color que
+	/// deben verse claros u oscuros segun el tema). Si la imagen no tiene
+	/// ninguna transparencia no se modifica (se pintaria un cuadro solido).
+	/// No usa ni llena la cache. Devuelve false si no se pudo cargar.
+	bool loadTinted(const std::string& path, const CST_Color& color);
+
 	/// Rounded corner radius (if >0, will round)
 	int cornerRadius = 0;
 

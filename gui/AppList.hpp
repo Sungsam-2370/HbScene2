@@ -91,6 +91,12 @@ private:
 	Button muteBtn;
 	ImageElement muteIcon;
 	ImageElement unmuteIcon;
+
+	// color con el que estan pintados los iconos de sonido (mute/unmute);
+	// se repintan cuando cambia el color de texto del tema
+	CST_Color iconTint = {0, 0, 0, 0};
+	bool iconTinted = false;
+	void tintAudioIcons();
 	Button toolsBtn;
 	std::vector<std::string> musicInfo;
 #endif

@@ -11,7 +11,7 @@ class AppList;
 #if defined(USE_OSC_BRANDING)
 #define TOTAL_CATS 6
 #else
-#define TOTAL_CATS 10
+#define TOTAL_CATS 11
 #endif
 
 // altura de la franja inferior compartida (indicador L + botones de accion).
@@ -68,8 +68,8 @@ public:
 	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "sidebar.utilities", "sidebar.emulators", "sidebar.games", "sidebar.media" };
 	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "utilities", "emulators", "games", "media" };
 #else
-	const char* cat_names[TOTAL_CATS] = { "Novedades", "sidebar.all", "N64 Nativos", "NSO Juegos Extra", "Traducciones", "Emuladores", "Ports Juegos", "Mods Juegos", "PkUnico", "sidebar.misc" };
-	const char* cat_value[TOTAL_CATS] = { "_novedades", "_all", "N64_Nativos", "NSO", "Traducciones", "Emuladores", "Ports", "Mods Juegos", "PkUnico", "_misc" };
+	const char* cat_names[TOTAL_CATS] = { "Novedades", "sidebar.all", "N64 Nativos", "NSO Juegos Extra", "Traducciones", "Emuladores", "Ports Juegos", "NxMasters", "Mods Juegos", "PkUnico", "sidebar.misc" };
+	const char* cat_value[TOTAL_CATS] = { "_novedades", "_all", "N64_Nativos", "NSO", "Traducciones", "Emuladores", "Ports", "NxMasters", "Mods Juegos", "PkUnico", "_misc" };
 #endif
 
 	ImageElement* hider = nullptr;
