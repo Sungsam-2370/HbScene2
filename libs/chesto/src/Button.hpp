@@ -25,6 +25,11 @@ public:
 
 	// whether the button is dark or light themed
 	bool dark = false;
+
+	// boton "plano": sin recuadro de fondo, solo icono + texto sobre lo que
+	// haya detras. lightContent = true -> texto/iconos claros (fondo oscuro).
+	void setFlat(bool flatMode, bool lightContent);
+	bool flat = false;
 	
 private:
 	static CST_Color colors[2];

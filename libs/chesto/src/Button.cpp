@@ -75,6 +75,21 @@ void Button::updateBounds()
 	text.update();
 }
 
+void Button::setFlat(bool flatMode, bool lightContent)
+{
+	if (flat == flatMode && dark == lightContent)
+		return;
+
+	flat = flatMode;
+	dark = lightContent;
+	hasBackground = !flat;
+	text.setColor(colors[dark]);
+	text.update();
+
+	// fuerza a process() a recargar el icono con la variante de color correcta
+	needsRedraw = true;
+}
+
 void Button::updateText(const std::string &inc_text)
 {
 	this->text.setText(inc_text);
@@ -124,7 +139,7 @@ void Button::render(Element* parent)
 
 	this->recalcPosition(parent);
 
-	if (shouldRenderGlossy()) {
+	if (shouldRenderGlossy() && !flat) {
 		// draw a glossy button
 		auto r = backgroundColor.r * 0xff;
 		auto g = backgroundColor.g * 0xff;
@@ -185,7 +200,7 @@ bool Button::process(InputEvents* event)
 		} else {
 			auto newPath = getControllerButtonImageForPlatform(this->physical, !dark, false);
 			icon.unhide();
-			hasBackground = true;
+			hasBackground = !flat;
 			icon.loadPath(newPath);
 			icon.resize(text.height*iconScale, text.height*iconScale);
 		}

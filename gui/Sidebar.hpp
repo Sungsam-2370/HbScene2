@@ -18,7 +18,7 @@ class AppList;
 // Sidebar dibuja su propia porcion (0..width) y AppList dibuja el resto
 // (width..SCREEN_WIDTH) usando la misma altura y color, para que ambas
 // mitades formen una sola barra continua que cruza toda la pantalla.
-#define SIDEBAR_FOOTER_HEIGHT (75/SCALER)
+#define SIDEBAR_FOOTER_HEIGHT (58/SCALER)
 #pragma once
 
 class Sidebar : public ListElement

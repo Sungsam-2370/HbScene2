@@ -35,4 +35,11 @@ AutoInstallResult InstallNspIfRequested(const std::string &root_path,
                                          bool install_to_nand,
                                          AutoInstallProgress progress = nullptr);
 
+// Instalacion directa: lee el .nsp/.nsz de internet (HTTP Range) y lo instala
+// mientras se descarga; el archivo nunca se escribe en la SD (sin limite de 4 GB).
+// url: valor de "instalacion_directa" en repo.json.
+AutoInstallResult InstallNspFromUrl(const std::string &url,
+                                    bool install_to_nand,
+                                    AutoInstallProgress progress = nullptr);
+
 }

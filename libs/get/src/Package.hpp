@@ -112,6 +112,25 @@ public:
 		return install_nsp;
 	}
 
+	// URL del .nsp/.nsz a instalar directo desde internet ("instalacion_directa").
+	[[nodiscard]] const std::string& getDirectInstallUrl() const
+	{
+		return direct_install_url;
+	}
+
+	// true si el paquete se instala SOLO por "instalacion_directa": trae esa
+	// linea y ningun zip_url (ni _2/_3/_4). No hay zips que bajar.
+	[[nodiscard]] bool isDirectOnly() const
+	{
+		return !direct_install_url.empty() && zipUrl.empty() && zipUrl2.empty()
+		       && zipUrl3.empty() && zipUrl4.empty();
+	}
+
+	// Escribe packages/<nombre>/manifest.install + info.json para que el paquete
+	// figure como instalado (version incluida). Se usa tras una instalacion
+	// directa exitosa, donde no hay zip que traiga esos archivos.
+	bool writeDirectInstallRecord(const std::string& pkg_path);
+
 	// instruccion final que se muestra en el mensaje de resultado (viene
 	// del campo "mensaje"/"message" de repo.json). Vacio si el paquete no
 	// define ninguna.
@@ -238,6 +257,7 @@ private:
 	                          // ROOT_PATH) del .nsp/.nsz/.xci a instalar
 	                          // automaticamente. Vacio por defecto -> no se
 	                          // instala nada.
+	std::string direct_install_url; // "instalacion_directa" en repo.json
 	std::string install_message; // "mensaje"/"message" en repo.json:
 	                              // instruccion final post-instalacion.
 	std::string notice;       // "aviso" en repo.json

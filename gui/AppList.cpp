@@ -2,6 +2,7 @@
 #include "AboutScreen.hpp"
 #include "FeedbackCenter.hpp"
 #include "ThemeManager.hpp"
+#include "FooterStyle.hpp"
 #include "ToolsScreen.hpp"
 #include "main.hpp"
 
@@ -380,6 +381,11 @@ void AppList::render(Element* parent)
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarFooterBg);
 	CST_FillRect(RootDisplay::renderer, &footerRect);
 
+	// linea de color en el borde superior de la barra
+	CST_Rect footerLineRect = { dimens.x, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT, SCREEN_WIDTH - dimens.x, SIDEBAR_FOOTER_LINE };
+	CST_SetDrawColor(RootDisplay::renderer, FooterStyle::lineColor());
+	CST_FillRect(RootDisplay::renderer, &footerLineRect);
+
 	// chrome (titulo arriba + botones abajo): siempre visible, encima de todo
 	for (Element* subelement : elements)
 		if (subelement->isAbsolute)
@@ -521,6 +527,22 @@ void AppList::update()
 	}
 	totalCount = appCards.size();
 
+	// Limite inferior del scroll: la lista solo baja hasta que la ultima fila
+	// de tarjetas queda completa justo encima de la barra inferior (antes la
+	// barra tapaba parte de las ultimas y no habia tope). Si todo cabe en
+	// pantalla no se scrollea.
+	{
+		int contentBottom = 0;
+		if (!appCards.empty())
+		{
+			const AppCard& last = appCards.back();
+			contentBottom = last.y + last.height + 15;
+		}
+		const int visibleBottom = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT;
+		this->lowerYScroll = std::min(0, visibleBottom - contentBottom);
+		clampScroll();
+	}
+
 	// add quit button
 #if defined(_3DS) || defined(_3DS_MOCK)
 	quitBtn.position(SCREEN_WIDTH - quitBtn.width - 5, 20);
@@ -627,8 +649,25 @@ void AppList::positionChrome()
 	return; // 3DS no tiene sidebar ni franja inferior (quitBtn ya se posiciono aparte)
 #else
 	// --- Botones de accion: abajo, en la franja compartida con Sidebar ---
-	const int footerY = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT / 2 - quitBtn.height / 2;
+	// centrados en la parte de la barra que queda debajo de la linea superior
+	const int footerY = SCREEN_HEIGHT - (SIDEBAR_FOOTER_HEIGHT - SIDEBAR_FOOTER_LINE) / 2 - quitBtn.height / 2;
 	const int gap = 10/SCALER;
+
+	// botones sin recuadro: solo icono + texto sobre el fondo de la barra,
+	// con colores claros u oscuros segun el fondo del tema activo
+	{
+		const bool light = FooterStyle::contentIsLight();
+		quitBtn.setFlat(true, light);
+		sortBtn.setFlat(true, light);
+		keyboardBtn.setFlat(true, light);
+		backspaceBtn.setFlat(true, light);
+		toolsBtn.setFlat(true, light);
+#if defined(MUSIC)
+		muteBtn.setFlat(true, light);
+		nowPlayingText.setColor(light ? CST_Color{0xff, 0xff, 0xff, 0xff} : CST_Color{0x00, 0x00, 0x00, 0xff});
+		nowPlayingText.update();
+#endif
+	}
 
 	// Salir queda fijo en el extremo derecho de la pantalla
 	quitBtn.position(SCREEN_WIDTH - quitBtn.width - 20/SCALER, footerY);

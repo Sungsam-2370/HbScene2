@@ -1,5 +1,6 @@
 #include "NspAutoInstall.hpp"
 #include "InstallEngine.hpp"
+#include "HttpByteSource.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -106,6 +107,53 @@ AutoInstallResult InstallNspIfRequested(const std::string &root_path,
         result.message = "No se pudo instalar el NSP automáticamente:\n" + install_res.error_message;
     }
     return result;
+}
+
+AutoInstallResult InstallNspFromUrl(const std::string &url,
+                                    bool install_to_nand,
+                                    AutoInstallProgress progress) {
+    AutoInstallResult result;
+    if (url.empty()) {
+        result.nothing_to_do = true;
+        result.success = true;
+        return result;
+    }
+
+#ifdef NETWORK_MOCK
+    result.message = "Instalacion directa no disponible en esta plataforma";
+    return result;
+#else
+    printf("[nspinstall] instalacion directa desde: %s\n", url.c_str());
+
+    HttpByteSource source(url, 4);
+    std::string err;
+    if (!source.Open(err)) {
+        printf("[nspinstall] no se pudo abrir la fuente: %s\n", err.c_str());
+        result.message = "No se pudo iniciar la instalacion directa:\n" + err;
+        return result;
+    }
+    printf("[nspinstall] tamano remoto: %llu bytes\n", (unsigned long long)source.Size());
+
+    ::nspinstall::InstallConfig config;
+    config.dest_storage_id = install_to_nand ? NcmStorageId_BuiltInUser : NcmStorageId_SdCard;
+    config.ignore_req_fw   = true;
+    config.reinstall_ncas  = false;
+
+    ::nspinstall::InstallResult install_res = ::nspinstall::InstallFromSource(
+        source, config,
+        [&progress](const ::nspinstall::InstallProgress &p) {
+            if (progress) {
+                progress(p.bytes_done, p.bytes_total, p.current_nca, p.preparing);
+            }
+        });
+
+    printf("[nspinstall] InstallFromSource (url) termino: %s\n", install_res.success ? "OK" : "FALLO");
+    result.success = install_res.success;
+    result.message = install_res.success
+        ? "INSTALACION EXITOSA"
+        : "No se pudo instalar el NSP automáticamente:\n" + install_res.error_message;
+    return result;
+#endif
 }
 
 }

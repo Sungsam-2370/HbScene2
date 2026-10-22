@@ -79,8 +79,7 @@ bool ListElement::handleInertiaScroll(InputEvents* event)
 		// if the scroll offset is less than the total number of apps
 		// (put on the mouse up to make it "snap" when going out of bounds)
 		// TODO: account for max number of apps too (prevent scrolling down forever)
-		if (elem->y > minYScroll)
-			elem->y = minYScroll;
+		elem->clampScroll();
 
 		ret |= true;
 	}
@@ -98,8 +97,7 @@ bool ListElement::handleInertiaScroll(InputEvents* event)
 			elem->elasticCounter = 0;
 
 		// TODO: same problem as above todo, also extract into method?
-		if (elem->y > minYScroll)
-			elem->y = minYScroll;
+		elem->clampScroll();
 
 		ret |= true;
 	}
@@ -110,8 +108,7 @@ bool ListElement::handleInertiaScroll(InputEvents* event)
 	{
 		// apply wheel scroll directly to y position, and then reset
 		elem->y += event->wheelScroll * 10;
-		if (elem->y > minYScroll)
-			elem->y = minYScroll;
+		elem->clampScroll();
 		event->wheelScroll *= 0.95;
 
 		if (abs(event->wheelScroll) < 0.1)

@@ -873,7 +873,6 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 	if (libget_status_callback != nullptr)
 		libget_status_callback(STATUS_INSTALLING, 1, 1);
 
-	std::unordered_set<std::string> incoming_paths;
 	const auto& entries = newManifest.getEntries();
 	int i = 0;
 	for (const auto& entry : entries)
@@ -881,8 +880,6 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 		if (networking_callback != nullptr)
 			networking_callback(nullptr, (double)(i + 1) / (double)entries.size());
 		i++;
-
-		incoming_paths.insert(entry.path);
 
 		auto found = infoMap.find(entry.zip_path);
 		if (found == infoMap.end())
@@ -914,12 +911,8 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 		}
 	}
 
-	// files that were part of the old version but are not in the new manifest are gone
-	for (const auto& entry : oldManifest.getEntries())
-	{
-		if ((entry.operation == MUPDATE || entry.operation == MEXTRACT) && incoming_paths.find(entry.path) == incoming_paths.end())
-			std::remove(entry.path.c_str());
-	}
+	// NOTE: files of the old version that are not in the new manifest are left
+	// alone on purpose (an incremental update never deletes anything).
 
 	// swap in the new manifest first and info.json (the version marker) last
 	std::remove(manifestPath.c_str());
@@ -940,6 +933,28 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 	this->manifest = Manifest(manifestPath, ROOT_PATH);
 	printf("--> Incremental update applied for %s\n", this->pkg_name.c_str());
 	return UPDATE_OK;
+}
+
+bool Package::writeDirectInstallRecord(const std::string& pkg_path)
+{
+	const std::string dir = pkg_path + this->pkg_name + "/";
+	if (!mkpath(dir))
+		return false;
+
+	// Manifest de una sola linea que no es operacion (se ignora): queda valido
+	// pero no lista ningun archivo, asi que desinstalar no borra nada de la SD.
+	const std::string manifestPath = dir + "manifest.install";
+	std::ofstream manifestFile(manifestPath);
+	manifestFile << "# instalacion directa (sin archivos en la SD)" << std::endl;
+	manifestFile.close();
+	if (!manifestFile)
+		return false;
+
+	const std::string infoPath = dir + "info.json";
+	std::ofstream infoFile(infoPath);
+	infoFile << "{\"version\":\"" << this->version << "\"}" << std::endl;
+	infoFile.close();
+	return static_cast<bool>(infoFile);
 }
 
 bool Package::remove(std::string_view pkg_path)

@@ -267,7 +267,18 @@ void AppDetails::proceed()
 		// ambos, incluyendo multi-zip si el paquete lo requiere. Cada uno
 		// ya tiene su propia barra de progreso (via networking_callback +
 		// libget_status_callback, arriba).
-		succeeded = (get->install(*package) != 0);
+		const bool directOnly = package->isDirectOnly();
+		if (directOnly)
+		{
+			// instalacion directa sin zips: no hay nada que descargar/extraer
+			// a la SD, el NSP/NSZ se instala mientras se baja (mas abajo)
+			package->runtime_used_delta = false;
+			succeeded = true;
+		}
+		else
+		{
+			succeeded = (get->install(*package) != 0);
+		}
 
 #if defined(SWITCH)
 		// si la descarga o la extraccion fallaron a medias, el archivo de
@@ -277,7 +288,7 @@ void AppDetails::proceed()
 #endif
 
 		// save the icon to the SD card, for offline use
-		if (appCard != NULL) {
+		if (appCard != NULL && !directOnly) {
 			// IMPORTANTE: el caché LOCAL del icono se guarda como PNG
 			// (saveTo, ya probado/confiable) aunque el servidor lo tenga
 			// en JPG y la descarga/visualizacion en red siga usando JPG.
@@ -312,32 +323,7 @@ void AppDetails::proceed()
 				nspStepNeeded = false;
 			}
 		}
-		if (nspStepNeeded)
-		{
-			// pantalla propia: reusamos los mismos elementos de
-			// descarga/extraccion (misma barra, mismo estilo), solo
-			// cambiando el texto para que se note que es un paso distinto
-			downloadStatus.setText("Instalando...");
-			downloadStatus.update();
-			downloadPercent.setText("0%");
-			downloadPercent.update();
-			downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
-			downloadProgress.percent = 0;
-			RootDisplay::mainDisplay->render(NULL);
-
-			// Los servicios de instalacion de titulos (spl/ncm/es/ns) se
-			// abren SOLO aca, justo antes de usarlos, y se cierran apenas
-			// terminamos -- no se mantienen abiertos toda la sesion.
-			splInitialize();
-			splCryptoInitialize();
-			ncmInitialize();
-			esInitialize();
-			nsInitialize();
-			nsextInitialize();
-
-			auto nspResult = nspinstall::InstallNspIfRequested(
-				ROOT_PATH, package->getInstallNsp(), false,
-				[](std::uint64_t done, std::uint64_t total, const std::string &, bool preparing) {
+			auto nspProgress = [](std::uint64_t done, std::uint64_t total, const std::string &, bool preparing) {
 					// reutiliza el mismo callback de progreso/heartbeat que
 					// ya usa la descarga -- todavia esta activo aca porque
 					// postInstallHook() (que lo limpia) corre despues
@@ -369,7 +355,33 @@ void AppDetails::proceed()
 
 					if (networking_callback != nullptr && total > 0)
 						networking_callback(nullptr, (double)done / (double)total);
-				});
+				};
+
+		if (nspStepNeeded)
+		{
+			// pantalla propia: reusamos los mismos elementos de
+			// descarga/extraccion (misma barra, mismo estilo), solo
+			// cambiando el texto para que se note que es un paso distinto
+			downloadStatus.setText("Instalando...");
+			downloadStatus.update();
+			downloadPercent.setText("0%");
+			downloadPercent.update();
+			downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+			downloadProgress.percent = 0;
+			RootDisplay::mainDisplay->render(NULL);
+
+			// Los servicios de instalacion de titulos (spl/ncm/es/ns) se
+			// abren SOLO aca, justo antes de usarlos, y se cierran apenas
+			// terminamos -- no se mantienen abiertos toda la sesion.
+			splInitialize();
+			splCryptoInitialize();
+			ncmInitialize();
+			esInitialize();
+			nsInitialize();
+			nsextInitialize();
+
+			auto nspResult = nspinstall::InstallNspIfRequested(
+				ROOT_PATH, package->getInstallNsp(), false, nspProgress);
 
 			nsextExit();
 			nsExit();
@@ -388,6 +400,67 @@ void AppDetails::proceed()
 
 			if (!nspResult.success)
 				succeeded = false;
+		}
+
+		// --- Paso 3b: instalacion directa (repo.json: "instalacion_directa") ---
+		// El .nsp/.nsz se lee de internet con HTTP Range y se instala mientras
+		// se descarga; nunca se escribe en la SD (sin limite de 4 GB de FAT32).
+		if (succeeded && !package->getDirectInstallUrl().empty())
+		{
+			downloadStatus.setText("Instalando (directo)...");
+			downloadStatus.update();
+			downloadPercent.setText("0%");
+			downloadPercent.update();
+			downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+			downloadProgress.percent = 0;
+			RootDisplay::mainDisplay->render(NULL);
+
+			splInitialize();
+			splCryptoInitialize();
+			ncmInitialize();
+			esInitialize();
+			nsInitialize();
+			nsextInitialize();
+
+			auto directResult = nspinstall::InstallNspFromUrl(
+				package->getDirectInstallUrl(), false, nspProgress);
+
+			nsextExit();
+			nsExit();
+			esExit();
+			ncmExit();
+			splCryptoExit();
+			splExit();
+
+			package->runtime_install_status = directResult.message;
+			printf("--> Instalacion directa [%s]: %s\n",
+			       package->getDirectInstallUrl().c_str(), directResult.success ? "OK" : "FALLO");
+
+			if (!directResult.success)
+			{
+				succeeded = false;
+			}
+			else if (package->isDirectOnly())
+			{
+				// recien ahora el paquete "existe": manifest + info.json (version)
+				// y el icono para uso offline. Si fallo antes, no se creo nada.
+				if (!package->writeDirectInstallRecord(get->mPkg_path))
+				{
+					printf("--> No se pudo escribir el registro del paquete\n");
+					package->runtime_install_status += "\n\n(Aviso: no se pudo guardar el registro; el juego quedo instalado pero la tienda no lo marcara como instalado.)";
+				}
+				else if (appCard != NULL)
+				{
+					auto iconSavePath = std::string(get->mPkg_path) + "/" + package->getPackageName() + "/icon.png";
+					appCard->icon.saveTo(iconSavePath, 256);
+				}
+			}
+		}
+#else
+		if (directOnly)
+		{
+			package->runtime_install_status = "La instalacion directa solo esta disponible en Switch.";
+			succeeded = false;
 		}
 #endif
 	}
@@ -413,10 +486,17 @@ void AppDetails::proceed()
 
 		if (succeeded)
 		{
-			message = "Descarga, extraccion";
-			if (!package->getInstallNsp().empty())
-				message += " e instalacion";
-			message += " completadas con exito.";
+			if (package->isDirectOnly())
+			{
+				message = "Descarga e instalacion completadas con exito.";
+			}
+			else
+			{
+				message = "Descarga, extraccion";
+				if (!package->getInstallNsp().empty() || !package->getDirectInstallUrl().empty())
+					message += " e instalacion";
+				message += " completadas con exito.";
+			}
 
 			if (!package->runtime_install_status.empty())
 				message += "\n\n" + package->runtime_install_status;

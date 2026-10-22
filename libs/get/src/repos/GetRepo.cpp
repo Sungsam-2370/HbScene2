@@ -175,6 +175,11 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 		if (cur.HasMember("instalacion"))
 			package->install_nsp = cur["instalacion"].GetString();
 
+		// instalacion directa: URL de un .nsp/.nsz que se instala mientras se
+		// descarga (nunca se guarda en la SD). Es independiente de "instalacion".
+		if (cur.HasMember("instalacion_directa") && cur["instalacion_directa"].IsString())
+			package->direct_install_url = cur["instalacion_directa"].GetString();
+
 		// aviso que se muestra ANTES de descargar; el usuario debe confirmar
 		// (A / touch) o cancelar (B / touch). Si no existe, no se muestra nada.
 		if (cur.HasMember("aviso") && cur["aviso"].IsString())

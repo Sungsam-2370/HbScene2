@@ -2,6 +2,7 @@
 #include "../libs/chesto/src/Constraint.hpp"
 #include <algorithm>
 #include "ThemeManager.hpp"
+#include "FooterStyle.hpp"
 #include "SupporterBenefit.hpp"
 #include "main.hpp"
 
@@ -319,6 +320,11 @@ void Sidebar::render(Element* parent)
 	CST_Rect footerSectionRect = { 0, footerTopY, width, SIDEBAR_FOOTER_HEIGHT };
 	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarFooterBg);
 	CST_FillRect(RootDisplay::renderer, &footerSectionRect);
+
+	// linea de color en el borde superior de la barra (continua con la de AppList)
+	CST_Rect footerLineRect = { 0, footerTopY, width, SIDEBAR_FOOTER_LINE };
+	CST_SetDrawColor(RootDisplay::renderer, FooterStyle::lineColor());
+	CST_FillRect(RootDisplay::renderer, &footerLineRect);
 
 	// --- Clip drawing to the category area so items don't overdraw the logo/title ---
 	CST_Rect clipRect = { 0, catAreaTop, width, footerTopY - catAreaTop };
