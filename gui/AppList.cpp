@@ -294,16 +294,22 @@ bool AppList::process(InputEvents* event)
 		// this means that if it's < 0 or > SCREEN_HEIGHT then it's not visible
 		int normalizedY = curTile->y + this->y;
 
+		// zona realmente visible de las tarjetas: entre el titulo (arriba) y la
+		// barra inferior (abajo). Antes se usaba la pantalla completa y el
+		// cursor podia quedar con el nombre/version detras de la barra.
+		const int visibleTop = listClipTop();
+		const int visibleBottom = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT;
+
 		// if we're FAR out of range upwards, speed up the scroll wheel (additive) to get back in range quicker
 		if (normalizedY < -200)
 			event->wheelScroll += 0.3;
 
 		// far out of range, for bottom of screen
-		else if (normalizedY > SCREEN_HEIGHT - curTile->height + 200)
+		else if (normalizedY > visibleBottom - curTile->height + 200)
 			event->wheelScroll -= 0.3;
 
 		// if we're slightly out of range above, recenter at the top row slowly
-		else if (normalizedY < -100)
+		else if (normalizedY < visibleTop + 10)
 			event->wheelScroll = 1;
 
 		// special case, scroll when we're on the bottom row of the top of the not-yet-scrolled screen
@@ -311,7 +317,7 @@ bool AppList::process(InputEvents* event)
 			event->wheelScroll -= 0.5;
 
 		// if we're out of range below, recenter at bottom row
-		else if (normalizedY > SCREEN_HEIGHT - curTile->height + 100)
+		else if (normalizedY + curTile->height > visibleBottom - 20)
 			event->wheelScroll = -1;
 
 		// if the card is this close to the top, just set it the list offset to 0 to scroll up to the top
@@ -337,10 +343,21 @@ bool AppList::process(InputEvents* event)
 	return ret;
 }
 
+int AppList::listClipTop() const
+{
+	return std::max(0, std::max(category.y + category.height,
+	                            sortBlurb.y + sortBlurb.height) + 8/SCALER);
+}
+
 void AppList::render(Element* parent)
 {
 	if (this->parent == NULL)
 		this->parent = parent;
+
+	// sea cual sea la via por la que se movio la lista (arrastre, inercia,
+	// cursor, rueda), al soltar siempre queda dentro de los limites
+	if (!this->dragging)
+		clampScroll();
 
 	// necesario para que this->xAbs/yAbs esten al dia (antes lo hacia
 	// super::render() por nosotros); los hijos lo usan como base para
@@ -368,8 +385,7 @@ void AppList::render(Element* parent)
 	// por encima de la franja - por eso nunca queda tapado.
 	// Arriba el recorte termina justo debajo del titulo de la seccion, para que
 	// las tarjetas que suben al scrollear desaparezcan antes de llegar al texto.
-	const int clipTop = std::max(0, std::max(category.y + category.height,
-	                                          sortBlurb.y + sortBlurb.height) + 8/SCALER);
+	const int clipTop = listClipTop();
 	CST_Rect clip = { dimens.x, clipTop, SCREEN_WIDTH - dimens.x, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT - clipTop };
 	SDL_RenderSetClipRect(RootDisplay::renderer, &clip);
 	for (Element* subelement : elements)

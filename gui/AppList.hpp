@@ -63,6 +63,9 @@ public:
 	// coordenadas, sin importar cuanto haya scrolleado la lista de tarjetas.
 	void positionChrome();
 
+	// borde superior de la zona visible de las tarjetas (justo debajo del titulo)
+	int listClipTop() const;
+
 #if defined(MUSIC)
 	// actualiza el texto "reproduciendo ahora" segun el estado de la musica
 	void updateNowPlayingText();
