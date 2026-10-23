@@ -76,6 +76,8 @@ public:
 	bool showingSplash = true;
 	bool renderedSplash = false;
 	ImageElement *spinner = nullptr;
+	ImageElement *splashImage = nullptr; // imagen de pantalla completa durante la carga inicial
+	void hideSplash();                   // quita splash + spinner (carga lista o error)
 
 	void playSFX();
 

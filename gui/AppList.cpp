@@ -97,8 +97,8 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	
 #if defined(MUSIC)
 	muteBtn.action = std::bind(&AppList::toggleAudio, this);
-	muteIcon.resize(38, 38);
-	unmuteIcon.resize(38, 38);
+	muteIcon.resize(32, 32);
+	unmuteIcon.resize(32, 32);
 	nowPlayingIcon.resize(26, 26);
 #endif
 
@@ -523,6 +523,13 @@ void AppList::update()
 			if (std::find(std::begin(sidebar->cat_value), std::end(sidebar->cat_value), package.getCategory()) != std::end(sidebar->cat_value))
 				continue;
 		}
+		else if (curCategoryValue == "_misjuegos")
+		{
+			// "Mis juegos": solo lo que el usuario ya tiene instalado
+			// (incluye los que tienen una actualizacion pendiente)
+			if (package.getStatus() != INSTALLED && package.getStatus() != UPDATE)
+				continue;
+		}
 		else if (!sidebar->searchModeActive && curCategoryValue != "_all" && curCategoryValue != "_novedades")
 		{
 			// if we're in a specific category, filter out package of different categories
@@ -648,14 +655,15 @@ void AppList::tintAudioIcons()
 {
 	// los iconos de sonido son de un solo color (oscuro); se pintan con el
 	// mismo color del texto del tema para que se lean sobre la barra
-	const CST_Color c = HBAS::ThemeManager::textPrimary;
-	if (iconTinted && c.r == iconTint.r && c.g == iconTint.g && c.b == iconTint.b)
+	// (ahora en gris fijo, mas discreto, para no competir con el boton "X")
+	const CST_Color c = { 150, 150, 150, 255 };
+	if (iconTinted)
 		return;
 
 	muteIcon.loadTinted(RAMFS "res/mute.png", c);
 	unmuteIcon.loadTinted(RAMFS "res/unmute.png", c);
-	muteIcon.resize(38, 38);
-	unmuteIcon.resize(38, 38);
+	muteIcon.resize(32, 32);
+	unmuteIcon.resize(32, 32);
 
 	iconTint = c;
 	iconTinted = true;

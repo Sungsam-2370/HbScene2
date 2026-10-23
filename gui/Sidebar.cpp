@@ -35,8 +35,11 @@ Sidebar::Sidebar()
 	// elements 0 through TOTAL_CATS are the sidebar texts (for highlighting)
 	for (int x = 0; x < TOTAL_CATS; x++)
 	{
-		// "NxMasters" todavia no tiene icono propio: usa el mismo de "Ports"
-		const std::string iconName = (std::string(cat_value[x]) == "NxMasters") ? "Ports" : cat_value[x];
+		// "NxMasters" todavia no tiene icono propio: usa el mismo de "Ports";
+		// "Mis juegos" (seccion especial) usa por ahora el de "PkUnico"
+		std::string iconName = cat_value[x];
+		if (iconName == "NxMasters") iconName = "Ports";
+		else if (iconName == "_misjuegos") iconName = "PkUnico";
 		category[x].icon = new ImageElement((std::string(RAMFS "res/") + iconName + ".png").c_str());
 		category[x].icon->resize(40/SCALER, 40/SCALER);
 		category[x].icon->position(30/SCALER, 150/SCALER + x * 70/SCALER - 5/SCALER - scrollOffset);

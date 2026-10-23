@@ -33,6 +33,20 @@ MainDisplay::MainDisplay()
 	super::append(&sidebar);
 	super::append(&appList);
 
+	// splash a pantalla completa mientras carga el repo.json y la lista de
+	// componentes (se agrega al final del arbol, asi queda encima de todo;
+	// el spinner se agrega despues y queda por delante). Si la imagen no
+	// existe simplemente no hay splash.
+#if !defined(_3DS) && !defined(_3DS_MOCK)
+	if (std::filesystem::exists(RAMFS "res/splash.png"))
+	{
+		splashImage = new ImageElement(RAMFS "res/splash.png");
+		splashImage->resize(SCREEN_WIDTH, SCREEN_HEIGHT);
+		splashImage->position(0, 0);
+		super::append(splashImage);
+	}
+#endif
+
 	needsRedraw = true;
 
 	updateSidebarColor();
@@ -100,22 +114,35 @@ MainDisplay::~MainDisplay()
 {
 	delete get;
 	delete spinner;
+	delete splashImage;
+}
+
+void MainDisplay::hideSplash() {
+	if (spinner) {
+		super::remove(spinner);
+		delete spinner;
+		spinner = nullptr;
+	}
+	if (splashImage) {
+		super::remove(splashImage);
+		delete splashImage;
+		splashImage = nullptr;
+	}
 }
 
 void MainDisplay::beginInitialLoad() {
 	networking_callback = nullptr;
 	
-	if (spinner) {
-		// remove spinner
-		super::remove(spinner);
-		delete spinner;
-		spinner = nullptr;
-	}
-
-	// set get instance to our applist
+	// set get instance to our applist; la lista completa se construye y se
+	// dibuja una vez MIENTRAS el splash sigue encima, asi al quitarlo ya
+	// esta todo listo (texturas de texto/iconos precargados)
 	appList.get = get;
 	appList.update();
 	appList.sidebar->addHints();
+	if (splashImage)
+		RootDisplay::render(NULL);
+
+	hideSplash();
 }
 
 bool MainDisplay::checkMetaRepoForUpdates(Get* get) {
@@ -676,7 +703,10 @@ bool MainDisplay::process(InputEvents* event)
 
 		spinner = new ImageElement(spinnerPath);
 		spinner->resize(90, 90);
-		spinner->constrain(ALIGN_TOP, 90)->constrain(ALIGN_CENTER_HORIZONTAL, 0)->constrain(OFFSET_LEFT, 45);
+		if (splashImage) // entre "CARGANDO" y el logo de la imagen
+			spinner->constrain(ALIGN_TOP, SCREEN_HEIGHT * 26 / 100)->constrain(ALIGN_CENTER_HORIZONTAL, 0);
+		else
+			spinner->constrain(ALIGN_TOP, 90)->constrain(ALIGN_CENTER_HORIZONTAL, 0)->constrain(OFFSET_LEFT, 45);
 		super::append(spinner);
 
 #if defined(_3DS) || defined(_3DS_MOCK)
@@ -715,12 +745,14 @@ bool MainDisplay::process(InputEvents* event)
 		if (!isOnline)
 		{
 			std::string connTestMsg = replaceAll(i18n("errors.conntest"), "PLATFORM", PLATFORM);
+			hideSplash();
 			RootDisplay::switchSubscreen(new ErrorScreen(i18n("errors.nowifi"), connTestMsg + "\n" + i18n("errors.dnsmsg")));
 			return true;
 		}
 
 		if (!atLeastOneEnabled)
 		{
+			hideSplash();
 			RootDisplay::switchSubscreen(new ErrorScreen(i18n("errors.noserver"), i18n("errors.norepos") + "\n" + i18n("errors.onepkg")));
 			return true;
 		}
@@ -763,6 +795,7 @@ bool MainDisplay::process(InputEvents* event)
 			cardText = i18n("errors.exfat") + "\n"s + cardText;
 	#endif
 
+			hideSplash();
 			RootDisplay::switchSubscreen(new ErrorScreen(i18n("errors.sdaccess"), cardText));
 			return true;
 		}
