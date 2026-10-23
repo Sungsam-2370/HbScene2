@@ -141,6 +141,28 @@ void MainDisplay::beginInitialLoad() {
 	// dibuja una vez MIENTRAS el splash sigue encima, asi al quitarlo ya
 	// esta todo listo (texturas de texto/iconos precargados)
 	appList.get = get;
+
+	// Precalentamiento: mientras el splash tapa todo, se construye una vez la
+	// lista MAS PESADA ("Todos los aportes"). Asi los textos (nombre, version,
+	// etc.) de todas las tarjetas quedan ya en la cache de texturas y, al
+	// cambiar de seccion mas tarde, no hay tirón la primera vez.
+	if (splashImage)
+	{
+		Sidebar* sb = appList.sidebar;
+		const int startCat = sb->curCategory;
+		for (int i = 0; i < TOTAL_CATS; i++)
+		{
+			if (std::string(sb->cat_value[i]) == "_all")
+			{
+				sb->curCategory = i;
+				appList.update();
+				RootDisplay::render(NULL);
+				break;
+			}
+		}
+		sb->curCategory = startCat;
+	}
+
 	appList.update();
 	appList.sidebar->addHints();
 	if (splashImage)
