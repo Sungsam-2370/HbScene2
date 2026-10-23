@@ -38,8 +38,12 @@ MainDisplay::MainDisplay()
 	// el spinner se agrega despues y queda por delante). Si la imagen no
 	// existe simplemente no hay splash.
 #if !defined(_3DS) && !defined(_3DS_MOCK)
-	if (std::filesystem::exists(RAMFS "res/splash.png"))
+	// (fopen en vez de std::filesystem: "resin:/" es un sistema de archivos
+	//  embebido y std::filesystem::exists puede devolver false ahi)
+	FILE* splashProbe = fopen(RAMFS "res/splash.png", "rb");
+	if (splashProbe)
 	{
+		fclose(splashProbe);
 		splashImage = new ImageElement(RAMFS "res/splash.png");
 		splashImage->resize(SCREEN_WIDTH, SCREEN_HEIGHT);
 		splashImage->position(0, 0);
