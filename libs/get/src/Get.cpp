@@ -74,6 +74,23 @@ Get::Get(
 	}
 }
 
+int Get::runUpdateZip(Package& package)
+{
+	package.runtime_install_status.clear();
+	int result = Package::UPDATE_FALLBACK;
+	if (package.downloadUpdateZip(mTmp_path))
+		result = package.installUpdate(mPkg_path, mTmp_path);
+	else if (!libget_cancelled())
+	{
+		printf("--> Could not download the update zip\n");
+		package.runtime_install_status = "No se pudo descargar el archivo de actualizacion.\nRevisa tu conexion e intentalo de nuevo.";
+	}
+
+	if (result == Package::UPDATE_CANCELLED)
+		libget_cancel_request();
+	return result;
+}
+
 int Get::install(Package& package, bool resume)
 {
 	// Evitar que la consola entre en reposo/hibernacion mientras dura
@@ -104,18 +121,7 @@ int Get::install(Package& package, bool resume)
 	{
 		printf("--> Trying the incremental update for [%s]\n", package.getPackageName().c_str());
 
-		package.runtime_install_status.clear();
-		int deltaResult = Package::UPDATE_FALLBACK;
-		if (package.downloadUpdateZip(mTmp_path))
-			deltaResult = package.installUpdate(mPkg_path, mTmp_path);
-		else if (!libget_cancelled())
-		{
-			printf("--> Could not download the update zip\n");
-			package.runtime_install_status = "No se pudo descargar el archivo de actualizacion.\nRevisa tu conexion e intentalo de nuevo.";
-		}
-
-		if (deltaResult == Package::UPDATE_CANCELLED)
-			libget_cancel_request();
+		const int deltaResult = runUpdateZip(package);
 		if (wasCancelled())
 			return false;
 
@@ -199,6 +205,29 @@ int Get::install(Package& package, bool resume)
 			package.install4(mPkg_path, mTmp_path, 4, zipTotal);
 			if (wasCancelled())
 				return false;
+		}
+	}
+
+	// instalacion nueva (los zips base ya estan): si el repo trae la linea "actualizacion"
+	// y lo recien instalado no es ya la version del repo, se baja y aplica ese zip
+	// encima. (Un paquete que ya estaba instalado no llega aqui: usa solo la actualizacion.)
+	if (!package.getUpdateUrl().empty())
+	{
+		package.updateStatus(mPkg_path); // lee el info.json recien instalado
+		if (package.getStatus() == UPDATE && package.canUseUpdateZip())
+		{
+			printf("--> Applying the update zip on top of the base install of [%s]\n", package.getPackageName().c_str());
+			const int r = runUpdateZip(package);
+			if (wasCancelled())
+				return false;
+			package.runtime_used_delta = (r == Package::UPDATE_OK);
+			if (r != Package::UPDATE_OK)
+			{
+				networking_callback = nullptr;
+				networking_callback_data = nullptr;
+				update();
+				return false;
+			}
 		}
 	}
 

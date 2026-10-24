@@ -454,7 +454,7 @@ void AppDetails::proceed()
 		// --- Paso 3b: instalacion directa (repo.json: "instalacion_directa") ---
 		// El .nsp/.nsz se lee de internet con HTTP Range y se instala mientras
 		// se descarga; nunca se escribe en la SD (sin limite de 4 GB de FAT32).
-		if (succeeded && !package->getDirectInstallUrl().empty() && !package->runtime_used_delta)
+		if (succeeded && !package->getDirectInstallUrl().empty() && !(useDeltaUpdate && package->runtime_used_delta))
 		{
 			downloadStatus.setText("Instalando (directo)...");
 			downloadStatus.update();

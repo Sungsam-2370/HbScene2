@@ -75,6 +75,9 @@ public:
 	void resetCancellation() { cancelRequested = false; }
 	
 private:
+	// descarga y aplica el zip de la linea "actualizacion" (devuelve Package::UPDATE_*)
+	int runUpdateZip(Package& package);
+
 	// the remote repos and packages
 	std::vector<std::shared_ptr<Repo>> repos;
 	std::vector<std::shared_ptr<Package>> packages;

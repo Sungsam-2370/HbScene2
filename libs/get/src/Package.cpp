@@ -906,9 +906,11 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 		installFilePath = std::string(ROOT_PATH) + rel;
 	}
 
-	// every file of the new manifest has to be either in this zip (changed) or
-	// already on the SD card (unchanged). If not, the user skipped a version and
-	// this partial update isn't enough: use the full download instead.
+	// los archivos del manifest nuevo que no vienen en este zip se dan por "sin
+	// cambios" y se esperan ya en la SD. Si alguno no esta, NO se aborta (ya no hay
+	// descarga completa de respaldo, y un manifest con una ruta que nunca existio no
+	// debe bloquear la actualizacion): se anota para avisar al terminar.
+	std::vector<std::string> missingOnSd;
 	for (const auto& entry : newManifest.getEntries())
 	{
 		if (entry.operation != MEXTRACT && entry.operation != MUPDATE && entry.operation != MGET)
@@ -921,10 +923,9 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 		struct stat fileStat = {};
 		if (stat(entry.path.c_str(), &fileStat) != 0)
 		{
-			printf("--> File [%s] is neither in the update zip nor on the SD card, need the full download\n",
+			printf("--> File [%s] is listed in the new manifest but is neither in the update zip nor on the SD card\n",
 				   entry.path.c_str());
-			cleanupStaging();
-			return fb("Faltan archivos que ni el zip de actualizacion ni la SD tienen (¿se salto una version?).");
+			missingOnSd.push_back(entry.zip_path); // solo para el registro de la consola
 		}
 	}
 
@@ -1001,6 +1002,7 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 
 	this->manifest = Manifest(manifestPath, ROOT_PATH);
 	printf("--> Incremental update applied for %s\n", this->pkg_name.c_str());
+
 	return UPDATE_OK;
 }
 
