@@ -97,33 +97,37 @@ int Get::install(Package& package, bool resume)
 
 	// actualizacion incremental: si el paquete ya esta instalado, hay una version
 	// nueva y el repo trae la linea "actualizacion", se baja solo el zip con los
-	// cambios. Si ese zip no sirve (no se pudo bajar, no es valido, faltan archivos
-	// porque el usuario se salto una version...) se sigue con la descarga completa.
+	// cambios y NO se descargan los zip_url completos (si el zip no se pudo aplicar
+	// se avisa el motivo). Sin linea "actualizacion" (o si "actualizacion_desde" no
+	// coincide con la version instalada) se usan los zip_url de siempre.
 	if (package.getStatus() == UPDATE && package.canUseUpdateZip())
 	{
 		printf("--> Trying the incremental update for [%s]\n", package.getPackageName().c_str());
 
+		package.runtime_install_status.clear();
 		int deltaResult = Package::UPDATE_FALLBACK;
 		if (package.downloadUpdateZip(mTmp_path))
 			deltaResult = package.installUpdate(mPkg_path, mTmp_path);
-		else
+		else if (!libget_cancelled())
+		{
 			printf("--> Could not download the update zip\n");
+			package.runtime_install_status = "No se pudo descargar el archivo de actualizacion.\nRevisa tu conexion e intentalo de nuevo.";
+		}
 
 		if (deltaResult == Package::UPDATE_CANCELLED)
 			libget_cancel_request();
 		if (wasCancelled())
 			return false;
 
-		if (deltaResult == Package::UPDATE_OK || deltaResult == Package::UPDATE_FAILED)
-		{
-			networking_callback = nullptr;
-			networking_callback_data = nullptr;
-			package.runtime_used_delta = (deltaResult == Package::UPDATE_OK);
+		// Con la linea "actualizacion" (y aplicable a la version instalada) se usa SOLO
+		// ese zip: nunca se descargan ademas los zip_url completos. Si no se pudo
+		// aplicar, se avisa el motivo en vez de bajar todo otra vez.
+		networking_callback = nullptr;
+		networking_callback_data = nullptr;
+		package.runtime_used_delta = (deltaResult == Package::UPDATE_OK);
+		if (deltaResult != Package::UPDATE_FALLBACK)
 			update();
-			return deltaResult == Package::UPDATE_OK;
-		}
-
-		printf("--> Incremental update not usable, doing the full download\n");
+		return deltaResult == Package::UPDATE_OK;
 	}
 
 	// calcular cuantos zips existen en total para este paquete (1 a 4)

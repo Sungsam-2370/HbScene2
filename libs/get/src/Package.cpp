@@ -800,6 +800,14 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 {
 	printf("Going to install the update zip for %s\n", this->pkg_name.c_str());
 
+	// si la actualizacion no se puede aplicar NO se descargan los zips completos
+	// (si el repo trae "actualizacion", actualizar usa solo eso): se guarda el motivo
+	// para mostrarlo al usuario
+	auto fb = [this](const char* why) {
+		this->runtime_install_status = std::string("No se pudo aplicar la actualizacion:\n") + why;
+		return UPDATE_FALLBACK;
+	};
+
 	if (libget_status_callback != nullptr)
 		libget_status_callback(STATUS_ANALYZING, 1, 1);
 	if (networking_callback != nullptr)
@@ -818,7 +826,7 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 	if (stat(zipPath.c_str(), &sbuff) != 0 || sbuff.st_size == 0)
 	{
 		printf("--> Update zip is missing or empty\n");
-		return UPDATE_FALLBACK;
+		return fb("El archivo de actualizacion no se descargo bien (vacio o inexistente).");
 	}
 
 	const std::string pkgDir = pkg_path + this->pkg_name + "/";
@@ -840,21 +848,21 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 	if (!oldManifest.isValid())
 	{
 		printf("--> No valid installed manifest, cannot apply an incremental update\n");
-		return UPDATE_FALLBACK;
+		return fb("El componente instalado no tiene un manifest valido, asi que no se puede aplicar la actualizacion.");
 	}
 
 	UnZip zip(zipPath);
 	if (!zip.IsValid())
 	{
 		printf("--> Update file is not a valid zip (server error page?)\n");
-		return UPDATE_FALLBACK;
+		return fb("El archivo de actualizacion no es un zip valido.");
 	}
 
 	if (zip.ExtractFile("manifest.install", newManifestPath) != 0 || zip.ExtractFile("info.json", newInfoPath) != 0)
 	{
 		printf("--> Update zip must contain manifest.install and info.json\n");
 		cleanupStaging();
-		return UPDATE_FALLBACK;
+		return fb("El zip de actualizacion debe incluir manifest.install e info.json.");
 	}
 
 	Manifest newManifest(newManifestPath, ROOT_PATH);
@@ -862,7 +870,7 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 	{
 		printf("--> Update zip has an invalid manifest.install\n");
 		cleanupStaging();
-		return UPDATE_FALLBACK;
+		return fb("El manifest.install del zip de actualizacion no es valido.");
 	}
 
 	// the version inside the new info.json must be the one the repo advertises,
@@ -881,7 +889,7 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 			printf("--> Update zip version (%s) doesn't match the repo version (%s)\n", newVersion.c_str(),
 				   this->version.c_str());
 			cleanupStaging();
-			return UPDATE_FALLBACK;
+			return fb("La version dentro del zip de actualizacion no coincide con la del repositorio.");
 		}
 	}
 
@@ -916,7 +924,7 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 			printf("--> File [%s] is neither in the update zip nor on the SD card, need the full download\n",
 				   entry.path.c_str());
 			cleanupStaging();
-			return UPDATE_FALLBACK;
+			return fb("Faltan archivos que ni el zip de actualizacion ni la SD tienen (¿se salto una version?).");
 		}
 	}
 

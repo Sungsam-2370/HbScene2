@@ -313,7 +313,10 @@ void AppDetails::proceed()
 		// ambos, incluyendo multi-zip si el paquete lo requiere. Cada uno
 		// ya tiene su propia barra de progreso (via networking_callback +
 		// libget_status_callback, arriba).
-		const bool directOnly = package->isDirectOnly();
+		// con actualizacion incremental aplicable se usa SOLO el zip de actualizacion
+		// (aunque el componente sea de instalacion directa): ni zip_url ni directa
+		const bool useDeltaUpdate = package->getStatus() == UPDATE && package->canUseUpdateZip();
+		const bool directOnly = package->isDirectOnly() && !useDeltaUpdate;
 		if (directOnly)
 		{
 			// instalacion directa sin zips: no hay nada que descargar/extraer
@@ -451,7 +454,7 @@ void AppDetails::proceed()
 		// --- Paso 3b: instalacion directa (repo.json: "instalacion_directa") ---
 		// El .nsp/.nsz se lee de internet con HTTP Range y se instala mientras
 		// se descarga; nunca se escribe en la SD (sin limite de 4 GB de FAT32).
-		if (succeeded && !package->getDirectInstallUrl().empty())
+		if (succeeded && !package->getDirectInstallUrl().empty() && !package->runtime_used_delta)
 		{
 			downloadStatus.setText("Instalando (directo)...");
 			downloadStatus.update();
