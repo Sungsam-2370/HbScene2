@@ -14,6 +14,7 @@
 
 #include "Utils.hpp"
 #include "ZipUtil.hpp"
+#include "Cancel.hpp"
 
 #if defined(SWITCH)
 #include <switch.h>
@@ -341,6 +342,8 @@ int UnZip::ExtractAllWithProgress(const std::string& dirToExtract)
 		}
 		if (code == UNZ_END_OF_LIST_OF_FILE) return 0;
 
+		if (libget_cancelled()) return -9;
+
 		unz_file_info_s fileInfo = GetFileInfo();
 		std::string fileName(dirToExtract);
 		fileName += '/';
@@ -348,7 +351,7 @@ int UnZip::ExtractAllWithProgress(const std::string& dirToExtract)
 
 		if (fileInfo.uncompressed_size != 0)
 		{
-			Extract(fileName, fileInfo);
+			if (Extract(fileName, fileInfo) == -9) return -9;
 
 			extractedBytes += fileInfo.uncompressed_size;
 
@@ -450,10 +453,16 @@ int UnZip::Extract(const std::string& path, const unz_file_info_s& fileInfo)
 
 int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 {
+	if (libget_cancelled())
+		return -9;
+
 	if (unzOpenCurrentFile(fileToUnzip) != UNZ_OK)
 	{
 		return -2;
 	}
+
+	// anotar lo que vamos a crear, por si el usuario cancela
+	g_libget_created.before(path);
 
 	size_t last_slash_idx = path.find_last_of("/\\");
 	if (last_slash_idx != std::string::npos)
@@ -489,6 +498,14 @@ int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 		u32 want = blocksize;
 		if (done + want > fileInfo.uncompressed_size)
 			want = fileInfo.uncompressed_size - done;
+
+		// el usuario puede cancelar (B 5 s) incluso a mitad de un archivo grande
+		libget_poll();
+		if (libget_cancelled())
+		{
+			failed = true;
+			break;
+		}
 
 		int readBytes = unzReadCurrentFile(fileToUnzip, buffer, want);
 		if (readBytes <= 0)

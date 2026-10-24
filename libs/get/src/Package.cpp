@@ -1,6 +1,7 @@
 #include "./repos/Repo.hpp"
 #include "Utils.hpp"
 #include "ZipUtil.hpp"
+#include "Cancel.hpp"
 #include "./repos/constants.h"
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
@@ -72,6 +73,14 @@ bool Package::downloadZip(std::string_view tmp_path, float*, bool resume, int zi
 	metadata.content_length = this->download_size;
 	
 	bool success = downloadFileToDiskWithMetadata(zipUrl, downloadPath, resume, &metadata);
+
+	// cancelado por el usuario: se borra lo descargado a medias (no se reanuda)
+	if (!success && libget_cancelled())
+	{
+		std::remove(downloadPath.c_str());
+		std::remove(getMetadataPath(downloadPath).c_str());
+		return false;
+	}
 	
 	// if the download filed, but some data was received, record any metadata
 	// (saves whether or not resume was requested)
@@ -119,6 +128,14 @@ bool Package::downloadZip2(std::string_view tmp_path, float*, bool resume, int z
 	download_metadata_t metadata = {};
 
 	bool success = downloadFileToDiskWithMetadata(this->zipUrl2, downloadPath, resume, &metadata);
+
+	// cancelado por el usuario: se borra lo descargado a medias (no se reanuda)
+	if (!success && libget_cancelled())
+	{
+		std::remove(downloadPath.c_str());
+		std::remove(getMetadataPath(downloadPath).c_str());
+		return false;
+	}
 
 	if (!success)
 	{
@@ -401,6 +418,12 @@ bool Package::install(const std::string& pkg_path, const std::string& tmp_path, 
 		const auto& entries = manifest.getEntries();
 		for (const auto& entry : entries)
 		{
+			if (libget_cancelled())
+			{
+				printf("--> Instalacion cancelada por el usuario\n");
+				return false;
+			}
+
 			if (networking_callback != nullptr) {
 				double progress = (double)(i + 1) / (double)entries.size();
 				networking_callback(nullptr, progress);
@@ -522,6 +545,14 @@ bool Package::downloadZip3(std::string_view tmp_path, float*, bool resume, int z
 
 	bool success = downloadFileToDiskWithMetadata(this->zipUrl3, downloadPath, resume, &metadata);
 
+	// cancelado por el usuario: se borra lo descargado a medias (no se reanuda)
+	if (!success && libget_cancelled())
+	{
+		std::remove(downloadPath.c_str());
+		std::remove(getMetadataPath(downloadPath).c_str());
+		return false;
+	}
+
 	if (!success)
 	{
 		struct stat file_info = {};
@@ -559,6 +590,14 @@ bool Package::downloadZip4(std::string_view tmp_path, float*, bool resume, int z
 	download_metadata_t metadata = {};
 
 	bool success = downloadFileToDiskWithMetadata(this->zipUrl4, downloadPath, resume, &metadata);
+
+	// cancelado por el usuario: se borra lo descargado a medias (no se reanuda)
+	if (!success && libget_cancelled())
+	{
+		std::remove(downloadPath.c_str());
+		std::remove(getMetadataPath(downloadPath).c_str());
+		return false;
+	}
 
 	if (!success)
 	{
@@ -622,7 +661,8 @@ bool Package::install2(const std::string& pkg_path, const std::string& tmp_path,
 	}
 
 	// extract all files from the second zip directly, no manifest needed
-	HomebrewZip.ExtractAllWithProgress(ROOT_PATH);
+	if (HomebrewZip.ExtractAllWithProgress(ROOT_PATH) == -9)
+		return false; // cancelado por el usuario
 
 	printf("--> Second zip installed for %s\n", this->pkg_name.c_str());
 	return true;
@@ -664,7 +704,8 @@ bool Package::install3(const std::string& pkg_path, const std::string& tmp_path,
 		return false;
 	}
 
-	HomebrewZip.ExtractAllWithProgress(ROOT_PATH);
+	if (HomebrewZip.ExtractAllWithProgress(ROOT_PATH) == -9)
+		return false; // cancelado por el usuario
 
 	printf("--> Third zip installed for %s\n", this->pkg_name.c_str());
 	return true;
@@ -706,7 +747,8 @@ bool Package::install4(const std::string& pkg_path, const std::string& tmp_path,
 		return false;
 	}
 
-	HomebrewZip.ExtractAllWithProgress(ROOT_PATH);
+	if (HomebrewZip.ExtractAllWithProgress(ROOT_PATH) == -9)
+		return false; // cancelado por el usuario
 
 	printf("--> Fourth zip installed for %s\n", this->pkg_name.c_str());
 	return true;
@@ -740,6 +782,14 @@ bool Package::downloadUpdateZip(std::string_view tmp_path) const
 
 	download_metadata_t metadata = {};
 	bool success = downloadFileToDiskWithMetadata(this->update_url, downloadPath, false, &metadata);
+
+	// cancelado por el usuario: se borra lo descargado a medias (no se reanuda)
+	if (!success && libget_cancelled())
+	{
+		std::remove(downloadPath.c_str());
+		std::remove(getMetadataPath(downloadPath).c_str());
+		return false;
+	}
 	if (!success)
 		std::remove(downloadPath.c_str());
 
@@ -877,6 +927,12 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 	int i = 0;
 	for (const auto& entry : entries)
 	{
+		if (libget_cancelled())
+		{
+			cleanupStaging(); // el manifest/info.json instalados no se tocaron
+			return UPDATE_CANCELLED;
+		}
+
 		if (networking_callback != nullptr)
 			networking_callback(nullptr, (double)(i + 1) / (double)entries.size());
 		i++;
@@ -903,6 +959,11 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 			break;
 		}
 
+		if (resp == -9)
+		{
+			cleanupStaging();
+			return UPDATE_CANCELLED;
+		}
 		if (resp < 0)
 		{
 			printf("--> Some issue happened while applying the update! Error: %d\n", resp);
@@ -933,6 +994,17 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 	this->manifest = Manifest(manifestPath, ROOT_PATH);
 	printf("--> Incremental update applied for %s\n", this->pkg_name.c_str());
 	return UPDATE_OK;
+}
+
+void Package::removeTempDownloads(std::string_view tmp_path) const
+{
+	const std::string base = std::string(tmp_path) + this->pkg_name;
+	const std::string files[] = { base + getUrlFileExt(), base + "_2.zip", base + "_3.zip", base + "_4.zip", base + "_upd.zip" };
+	for (const auto& f : files)
+	{
+		std::remove(f.c_str());
+		std::remove(getMetadataPath(f).c_str());
+	}
 }
 
 bool Package::writeDirectInstallRecord(const std::string& pkg_path)

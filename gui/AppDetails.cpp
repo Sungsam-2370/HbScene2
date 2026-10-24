@@ -14,6 +14,7 @@
 
 #include "../libs/get/src/Get.hpp"
 #include "../libs/get/src/Utils.hpp"
+#include "../libs/get/src/Cancel.hpp"
 
 #include "../libs/chesto/src/RootDisplay.hpp"
 #include "../libs/chesto/src/Constraint.hpp"
@@ -31,6 +32,12 @@
 
 int AppDetails::lastFrameTime = 99;
 
+// --- cancelacion con B mantenido ---
+static constexpr int CANCEL_HOLD_MS = 5000;
+static int gBHeldSince = 0;      // instante en que se presiono B (0 = no esta presionada)
+static int gLastHintSecs = -2;   // ultimo estado mostrado en el aviso (para no redibujar de mas)
+static int gLastPollTick = 0;
+
 AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	: package(&package)
 	, get(appList->get)
@@ -43,6 +50,7 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	, content(&package, appList->useBannerIcons)
 	, downloadStatus(i18n("details.status"), 30 / SCALER, &white)
 	, downloadPercent("0%", 24 / SCALER, &white)
+	, cancelHint("Manten B 5 s para cancelar", 20 / SCALER, &white)
 {
 	// TODO: show current app status somewhere
 
@@ -177,6 +185,10 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	// contador de porcentaje, centrado, debajo de la barra de progreso
 	downloadPercent.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 15 / SCALER);
 	downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
+	// aviso de cancelacion, debajo del porcentaje
+	cancelHint.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 70 / SCALER);
+	cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
 }
 
 AppDetails::~AppDetails()
@@ -244,10 +256,25 @@ void AppDetails::proceed()
 	this->operating = true;
 	// event->update();
 
+	// estado de cancelacion limpio para esta operacion
+	libget_cancel_reset();
+	g_libget_created.clear();
+	gBHeldSince = 0;
+	gLastHintSecs = -2;
+	gLastPollTick = 0;
+	cancelHint.setText("Manten B 5 s para cancelar");
+	cancelHint.update();
+	cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
 	// description of what we're doing
 	super::append(&downloadProgress);
 	super::append(&downloadStatus);
 	super::append(&downloadPercent);
+	if (this->package->getStatus() != INSTALLED) // al desinstalar no aplica
+	{
+		super::append(&cancelHint);
+		g_libget_poll = &AppDetails::pollCancelHook;
+	}
 
 	// setup progress bar callback
 	networking_callback = AppDetails::updateCurrentlyDisplayedPopup;
@@ -258,6 +285,25 @@ void AppDetails::proceed()
 
 	bool wasUninstall = (this->package->getStatus() == INSTALLED);
 	bool succeeded = true;
+
+	// copia del registro actual del paquete (manifest.install + info.json), para
+	// poder dejarlo EXACTAMENTE igual si el usuario cancela a mitad de camino
+	const std::string pkgDir = get->mPkg_path + this->package->getPackageName() + "/";
+	std::string bakManifest, bakInfo;
+	bool hadManifest = false, hadInfo = false;
+	if (!wasUninstall)
+	{
+		auto slurp = [](const std::string& path, std::string& out) -> bool {
+			std::ifstream f(path, std::ios::binary);
+			if (!f) return false;
+			std::stringstream ss;
+			ss << f.rdbuf();
+			out = ss.str();
+			return true;
+		};
+		hadManifest = slurp(pkgDir + "manifest.install", bakManifest);
+		hadInfo = slurp(pkgDir + "info.json", bakInfo);
+	}
 
 	// install or remove this package based on the package status
 	if (wasUninstall) {
@@ -288,7 +334,7 @@ void AppDetails::proceed()
 #endif
 
 		// save the icon to the SD card, for offline use
-		if (appCard != NULL && !directOnly) {
+		if (appCard != NULL && !directOnly && !libget_cancelled()) {
 			// IMPORTANTE: el caché LOCAL del icono se guarda como PNG
 			// (saveTo, ya probado/confiable) aunque el servidor lo tenga
 			// en JPG y la descarga/visualizacion en red siga usando JPG.
@@ -465,7 +511,46 @@ void AppDetails::proceed()
 #endif
 	}
 
+	// --- Cancelado por el usuario (B 5 s) ---
+	// se deshace lo que esta operacion creo y se deja el registro como estaba:
+	// ni info.json ni manifest.install quedan modificados
+	// (si la operacion ya habia terminado bien, una cancelacion tardia se ignora)
+	const bool userCancelled = libget_cancelled() && !wasUninstall && !succeeded;
+	if (userCancelled)
+	{
+		printf("--> Cancelado por el usuario: deshaciendo lo creado\n");
+		g_libget_created.rollback(); // archivos/carpetas NUEVOS de esta operacion
+
+		auto restore = [](const std::string& path, bool had, const std::string& content) {
+			if (had)
+			{
+				std::ofstream f(path, std::ios::binary | std::ios::trunc);
+				f << content;
+			}
+			else
+				std::remove(path.c_str());
+		};
+		restore(pkgDir + "manifest.install", hadManifest, bakManifest);
+		restore(pkgDir + "info.json", hadInfo, bakInfo);
+		std::remove((pkgDir + "manifest.install.new").c_str());
+		std::remove((pkgDir + "info.json.new").c_str());
+
+		if (!hadManifest)
+		{
+			// era una instalacion nueva: tampoco debe quedar el icono ni la carpeta
+			std::remove((pkgDir + "icon.png").c_str());
+			std::remove((pkgDir + "icon.jpg").c_str());
+			rmdir(pkgDir.c_str());
+		}
+
+		package->removeTempDownloads(get->mTmp_path);
+		succeeded = false;
+	}
+
 	postInstallHook();
+	g_libget_poll = nullptr;
+	gBHeldSince = 0;
+	libget_cancel_reset();
 
 	// Sacar de pantalla la barra de progreso (descarga/extraccion/instalacion)
 	// ANTES de mostrar el mensaje final -- si no, queda dibujada de fondo
@@ -474,6 +559,7 @@ void AppDetails::proceed()
 	super::remove(&downloadProgress);
 	super::remove(&downloadStatus);
 	super::remove(&downloadPercent);
+	super::remove(&cancelHint);
 
 	// --- Paso 4: mensaje final ---
 	// Solo para instalaciones (no al desinstalar), mismo estilo que el
@@ -484,7 +570,16 @@ void AppDetails::proceed()
 		std::string title = succeeded ? "Instalacion exitosa" : "Hubo un problema";
 		std::string message;
 
-		if (succeeded)
+		if (userCancelled)
+		{
+			title = "Operacion cancelada";
+			message = "Se cancelo la operacion.\n\nSe borro lo descargado y no se modifico "
+			          "el registro (info.json / manifest) de este componente.";
+			if (hadManifest)
+				message += "\n\nSi ya se habian reemplazado algunos archivos, esos no se pueden "
+				           "restaurar: vuelve a actualizar para completarlo.";
+		}
+		else if (succeeded)
 		{
 			if (package->isDirectOnly())
 			{
@@ -793,9 +888,78 @@ int AppDetails::updatePopupStatus(int status, int num, int num_total)
 	return 0;
 }
 
+void AppDetails::pollCancelHook()
+{
+	pollCancel(false);
+}
+
+void AppDetails::pollCancel(bool force)
+{
+	AppDetails* popup = (AppDetails*)RootDisplay::subscreen;
+	if (popup == NULL || !popup->operating || popup->parent == NULL)
+		return;
+
+	int now = CST_GetTicks();
+	if (!force && now - gLastPollTick < 60)
+		return;
+	gLastPollTick = now;
+
+	// atender los eventos pendientes (como antes) y seguir el boton B
+	InputEvents events;
+	while (events.update())
+	{
+		if (events.pressed(B_BUTTON))
+		{
+			if (gBHeldSince == 0)
+				gBHeldSince = now ? now : 1;
+		}
+		else if (events.released(B_BUTTON))
+			gBHeldSince = 0;
+
+		RootDisplay::mainDisplay->process(&events);
+	}
+
+	// cuanto lleva presionada (si se solto antes de tiempo, no pasa nada)
+	int secs = -1; // -1: sin cuenta regresiva
+	if (gBHeldSince != 0)
+	{
+		int held = now - gBHeldSince;
+		if (held >= CANCEL_HOLD_MS)
+			libget_cancel_request();
+		else if (held >= 300)
+			secs = (CANCEL_HOLD_MS - held + 999) / 1000; // 5..1
+	}
+	if (libget_cancelled())
+		secs = 0;
+
+	if (secs != gLastHintSecs)
+	{
+		gLastHintSecs = secs;
+		std::string text;
+		if (secs == 0)
+			text = "Cancelando...";
+		else if (secs > 0)
+			text = "Cancelando en " + std::to_string(secs) + "  (suelta B para continuar)";
+		else
+			text = "Manten B 5 s para cancelar";
+
+		popup->cancelHint.setText(text);
+		popup->cancelHint.update();
+		popup->cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
+		// que se vea aunque la operacion no este reportando progreso
+		RootDisplay::mainDisplay->render(NULL);
+	}
+}
+
 int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 {
 	(void)clientp;
+
+	// ya cancelado: devolver != 0 hace que curl (y la descarga por tramos) aborten
+	if (libget_cancelled())
+		return 1;
+
 	int now = CST_GetTicks();
 	int diff = now - AppDetails::lastFrameTime;
 
@@ -807,6 +971,11 @@ int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 	// (never return early if it's 100% done)
 	if (diff < 120 && amount != 1)
 		return 0;
+
+	// revisar B (5 s para cancelar) y atender eventos pendientes
+	pollCancel(true);
+	if (libget_cancelled())
+		return 1;
 
 	AppDetails* popup = (AppDetails*)RootDisplay::subscreen;
 
@@ -832,15 +1001,10 @@ int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 
 		// force render the element right here (and it's progress bar too)
 		if (popup->parent != NULL)
-		{
-			InputEvents* events = new InputEvents();
-			while (events->update())
-				RootDisplay::mainDisplay->process(events);
 			RootDisplay::mainDisplay->render(NULL);
-		}
 	}
 
 	AppDetails::lastFrameTime = CST_GetTicks();
 
-	return 0;
+	return libget_cancelled() ? 1 : 0;
 }

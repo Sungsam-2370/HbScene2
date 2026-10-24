@@ -65,6 +65,7 @@ public:
 	static constexpr int UPDATE_OK = 0;       // actualizado
 	static constexpr int UPDATE_FALLBACK = 1; // el zip incremental no sirve: usar la descarga completa
 	static constexpr int UPDATE_FAILED = 2;   // error real (disco, escritura...)
+	static constexpr int UPDATE_CANCELLED = 3; // el usuario cancelo (B 5 s)
 	bool downloadUpdateZip(std::string_view tmp_path) const;
 	int installUpdate(const std::string& pkg_path, const std::string& tmp_path);
 
@@ -138,6 +139,8 @@ public:
 	// figure como instalado (version incluida). Se usa tras una instalacion
 	// directa exitosa, donde no hay zip que traiga esos archivos.
 	bool writeDirectInstallRecord(const std::string& pkg_path);
+	// borra los zips (y su metadata de reanudacion) que esta operacion dejo en tmp
+	void removeTempDownloads(std::string_view tmp_path) const;
 
 	// instruccion final que se muestra en el mensaje de resultado (viene
 	// del campo "mensaje"/"message" de repo.json). Vacio si el paquete no

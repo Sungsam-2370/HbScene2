@@ -1,6 +1,8 @@
 #include "NspAutoInstall.hpp"
 #include "InstallEngine.hpp"
 #include "HttpByteSource.hpp"
+#include "../Cancel.hpp"
+#include "../Cancel.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -103,6 +105,9 @@ AutoInstallResult InstallNspIfRequested(const std::string &root_path,
     result.success = install_res.success;
     if (install_res.success) {
         result.message = "INSTALACION EXITOSA";
+    } else if (libget_cancelled()) {
+        result.cancelled = true;
+        result.message = "Instalacion cancelada por el usuario.";
     } else {
         result.message = "No se pudo instalar el NSP automáticamente:\n" + install_res.error_message;
     }
@@ -149,9 +154,13 @@ AutoInstallResult InstallNspFromUrl(const std::string &url,
 
     printf("[nspinstall] InstallFromSource (url) termino: %s\n", install_res.success ? "OK" : "FALLO");
     result.success = install_res.success;
-    result.message = install_res.success
-        ? "INSTALACION EXITOSA"
-        : "No se pudo instalar el NSP automáticamente:\n" + install_res.error_message;
+    if (install_res.success)
+        result.message = "INSTALACION EXITOSA";
+    else if (libget_cancelled()) {
+        result.cancelled = true;
+        result.message = "Instalacion cancelada por el usuario.";
+    } else
+        result.message = "No se pudo instalar el NSP automáticamente:\n" + install_res.error_message;
     return result;
 #endif
 }

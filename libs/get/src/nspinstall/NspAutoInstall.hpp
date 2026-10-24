@@ -11,6 +11,7 @@ struct AutoInstallResult {
     // simplemente no había nada que instalar)
     bool nothing_to_do = false;
     bool success       = false;
+    bool cancelled     = false; // el usuario cancelo (mantener B 5 s)
     std::string message; // texto listo para mostrar en el popup de resultado
 };
 

@@ -31,6 +31,7 @@
 #include <unistd.h>
 
 #include "../Utils.hpp" // setPlatformCurlFlags()
+#include "../Cancel.hpp"
 
 namespace nspinstall {
 
@@ -167,6 +168,7 @@ public:
         assign_work();
 
         while(!failed && next_deliver < nchunks) {
+            if(libget_cancelled()) { failed = true; break; } // el usuario cancelo
             int running = 0;
             curl_multi_perform(multi_, &running);
 

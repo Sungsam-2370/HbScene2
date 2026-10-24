@@ -5,6 +5,7 @@
 #include "NcaStructs.hpp"
 #include "NcmWrapper.hpp"
 #include "NszDecompressor.hpp"
+#include "../Cancel.hpp"
 #include "Pfs0Parser.hpp"
 
 #include <algorithm>
@@ -246,6 +247,7 @@ bool StreamNcaToStorage(ByteSource &source, std::uint64_t offset, std::uint64_t 
     bool write_ok = true;
     const bool read_ok = source.ReadRange(offset + written, nca_size - written,
         [&](const void *data, std::size_t len) -> bool {
+            if(libget_cancelled()) { write_ok = false; return false; } // el usuario cancelo
             if(!storage.WritePlaceholder(nca_id, written, data, len)) { write_ok = false; return false; }
             written += len;
             if(progress) progress(InstallProgress{written, nca_size, nca_name, nca_index, nca_count, false});
@@ -265,6 +267,9 @@ bool InstallSingleNca(ByteSource &source,
                        ProgressCallback &progress,
                        std::uint32_t nca_index, std::uint32_t nca_count,
                        const HeaderKey *header_key) {
+    if(libget_cancelled()) return false;
+    const auto stop_cb = []() { return libget_cancelled(); };
+
     if(IsNczFilename(nca_entry->name)) {
         const std::string container_path = source.LocalPath();
 
@@ -283,7 +288,7 @@ bool InstallSingleNca(ByteSource &source,
                 storage, nca_id, *header_key,
                 [&progress, &nca_entry, nca_index, nca_count](std::uint64_t done, std::uint64_t total) {
                     if(progress) progress(InstallProgress{done, total, nca_entry->name, nca_index, nca_count, true});
-                });
+                }, stop_cb);
         }
 
         if(header_key != nullptr) {
@@ -292,16 +297,18 @@ bool InstallSingleNca(ByteSource &source,
                 storage, nca_id, *header_key,
                 [&progress, &nca_entry, nca_index, nca_count](std::uint64_t done, std::uint64_t total) {
                     if(progress) progress(InstallProgress{done, total, nca_entry->name, nca_index, nca_count, true});
-                });
+                }, stop_cb);
             if(ok) return true;
+            if(libget_cancelled()) return false;
         }
 
         std::string decompressed = DecompressNczToTemp(
             container_path, nca_entry->offset, nca_entry->size, kTempDir,
             [&progress, &nca_entry, nca_index, nca_count](std::uint64_t done, std::uint64_t total) {
                 if(progress) progress(InstallProgress{done, total, nca_entry->name, nca_index, nca_count, true});
-            });
+            }, stop_cb);
 
+        if(decompressed.empty() && libget_cancelled()) return false;
         if(decompressed.empty()) {
             return StreamNcaToStorage(source, nca_entry->offset, nca_entry->size,
                                        storage, nca_id, progress, nca_index, nca_count,

@@ -10,6 +10,7 @@
 #include "rapidjson/writer.h"
 
 #include "Get.hpp"
+#include "Cancel.hpp"
 #include "./repos/GetRepo.hpp"
 #include "./repos/LocalRepo.hpp"
 #include "Utils.hpp"
@@ -82,6 +83,18 @@ int Get::install(Package& package, bool resume)
 
 	package.runtime_used_delta = false;
 
+	// si el usuario cancela (B 5 s): se borran los zips temporales, se limpian los
+	// callbacks y se sale sin tocar nada mas (la UI deshace lo ya creado)
+	auto wasCancelled = [&]() -> bool {
+		if (!libget_cancelled())
+			return false;
+		package.removeTempDownloads(mTmp_path);
+		networking_callback = nullptr;
+		networking_callback_data = nullptr;
+		printf("--> Operacion cancelada por el usuario para [%s]\n", package.getPackageName().c_str());
+		return true;
+	};
+
 	// actualizacion incremental: si el paquete ya esta instalado, hay una version
 	// nueva y el repo trae la linea "actualizacion", se baja solo el zip con los
 	// cambios. Si ese zip no sirve (no se pudo bajar, no es valido, faltan archivos
@@ -95,6 +108,11 @@ int Get::install(Package& package, bool resume)
 			deltaResult = package.installUpdate(mPkg_path, mTmp_path);
 		else
 			printf("--> Could not download the update zip\n");
+
+		if (deltaResult == Package::UPDATE_CANCELLED)
+			libget_cancel_request();
+		if (wasCancelled())
+			return false;
 
 		if (deltaResult == Package::UPDATE_OK || deltaResult == Package::UPDATE_FAILED)
 		{
@@ -116,6 +134,8 @@ int Get::install(Package& package, bool resume)
 
 	// found package in a remote server, fetch it
 	bool located = package.downloadZip(mTmp_path, nullptr, resume, 1, zipTotal);
+	if (wasCancelled())
+		return false;
 
 	if (!located)
 	{
@@ -127,35 +147,55 @@ int Get::install(Package& package, bool resume)
 
 	// install the package, (extracts manifest, etc)
 	package.install(mPkg_path, mTmp_path, 1, zipTotal);
+	if (wasCancelled())
+		return false;
 
 	// if a second zip exists, download and install it too
 	if (!package.zipUrl2.empty())
 	{
 		bool located2 = package.downloadZip2(mTmp_path, nullptr, resume, 2, zipTotal);
+		if (wasCancelled())
+			return false;
 		if (!located2)
 			printf("--> Error retrieving second zip for [%s]\n", package.getPackageName().c_str());
 		else
+		{
 			package.install2(mPkg_path, mTmp_path, 2, zipTotal);
+			if (wasCancelled())
+				return false;
+		}
 	}
 
 	// if a third zip exists, download and install it too
 	if (!package.zipUrl3.empty())
 	{
 		bool located3 = package.downloadZip3(mTmp_path, nullptr, resume, 3, zipTotal);
+		if (wasCancelled())
+			return false;
 		if (!located3)
 			printf("--> Error retrieving third zip for [%s]\n", package.getPackageName().c_str());
 		else
+		{
 			package.install3(mPkg_path, mTmp_path, 3, zipTotal);
+			if (wasCancelled())
+				return false;
+		}
 	}
 
 	// if a fourth zip exists, download and install it too
 	if (!package.zipUrl4.empty())
 	{
 		bool located4 = package.downloadZip4(mTmp_path, nullptr, resume, 4, zipTotal);
+		if (wasCancelled())
+			return false;
 		if (!located4)
 			printf("--> Error retrieving fourth zip for [%s]\n", package.getPackageName().c_str());
 		else
+		{
 			package.install4(mPkg_path, mTmp_path, 4, zipTotal);
+			if (wasCancelled())
+				return false;
+		}
 	}
 
 	printf("--> Downloaded [%s] to sdroot/\n", package.getPackageName().c_str());

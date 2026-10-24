@@ -40,6 +40,13 @@ public:
 	static int updatePopupStatus(int status, int num = 1, int num_total = 1);
 	static int lastFrameTime;
 
+	// cancelacion: mantener B 5 segundos mientras se descarga/extrae/instala.
+	// pollCancel revisa la tecla (y atiende los eventos pendientes); force =
+	// true la ignora el limitador de frecuencia. pollCancelHook es la version
+	// sin argumentos que se engancha a libget (g_libget_poll).
+	static void pollCancel(bool force);
+	static void pollCancelHook();
+
 	void proceed();
 	void back();
 	void launch();
@@ -64,6 +71,7 @@ private:
 	AppDetailsContent content;
 	TextElement downloadStatus;
 	TextElement downloadPercent;
+	TextElement cancelHint; // "Manten B 5 s para cancelar" / cuenta regresiva
 };
 
 #endif
