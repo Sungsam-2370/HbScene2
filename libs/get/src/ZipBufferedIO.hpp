@@ -21,6 +21,8 @@
 // ---------------------------------------------------------------------------
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -34,7 +36,13 @@
 
 namespace zipio {
 
-constexpr uint64_t kBlock = 256 * 1024;
+// tamaño de cada ventana de lectura (y umbral de "lectura grande" que va directo). Se puede
+// cambiar con "lectura_kb" en .get/extraccion.cfg (ver ZipUtil.cpp)
+inline uint64_t gBlock = 256 * 1024;
+
+// contadores de E/S real contra la SD (para el registro de extraccion)
+inline std::atomic<uint64_t> gReadNs{ 0 };
+inline std::atomic<uint64_t> gReadBytes{ 0 };
 
 struct Window
 {
@@ -57,6 +65,19 @@ struct File
 // lee exactamente n bytes (o hasta el fin del archivo) desde offset, directo del descriptor
 inline uint64_t rawRead(File* f, uint64_t offset, uint8_t* dst, uint64_t n)
 {
+	const auto t0 = std::chrono::steady_clock::now();
+	struct Count
+	{
+		std::chrono::steady_clock::time_point t0;
+		uint64_t* got;
+		~Count()
+		{
+			gReadNs += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+			gReadBytes += *got;
+		}
+	};
+	uint64_t gotTotal = 0;
+	Count count{ t0, &gotTotal };
 	if (f->fdpos != offset)
 	{
 		if (lseek(f->fd, (off_t)offset, SEEK_SET) < 0)
@@ -78,6 +99,7 @@ inline uint64_t rawRead(File* f, uint64_t offset, uint8_t* dst, uint64_t n)
 		if (r == 0)
 			break;
 		got += (uint64_t)r;
+		gotTotal = got;
 		f->fdpos += (uint64_t)r;
 	}
 	return got;
@@ -132,7 +154,7 @@ inline uLong ZCALLBACK readFn(voidpf, voidpf stream, void* buf, uLong size)
 			take = std::min<uint64_t>(n, w->start + w->len - f->pos);
 			memcpy(dst, w->buf.data() + (f->pos - w->start), (size_t)take);
 		}
-		else if (n >= kBlock)
+		else if (n >= gBlock)
 		{
 			// lectura grande: directo al destino
 			take = rawRead(f, f->pos, dst, n);
@@ -144,9 +166,9 @@ inline uLong ZCALLBACK readFn(voidpf, voidpf stream, void* buf, uLong size)
 			// llenar la ventana que no se uso la ultima vez
 			int idx = 1 - f->last;
 			Window& c = f->win[idx];
-			if (c.buf.empty())
-				c.buf.resize((size_t)kBlock);
-			uint64_t fill = std::min<uint64_t>(kBlock, f->size - f->pos);
+			if (c.buf.size() != (size_t)gBlock)
+				c.buf.assign((size_t)gBlock, 0);
+			uint64_t fill = std::min<uint64_t>(gBlock, f->size - f->pos);
 			uint64_t got = rawRead(f, f->pos, c.buf.data(), fill);
 			if (got == 0)
 				break;

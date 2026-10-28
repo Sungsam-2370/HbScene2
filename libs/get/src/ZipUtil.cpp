@@ -16,6 +16,7 @@
 #include "ZipUtil.hpp"
 #include "Cancel.hpp"
 
+#include <atomic>
 #include <condition_variable>
 #include <errno.h>
 #include <mutex>
@@ -23,7 +24,54 @@
 #include <sys/stat.h>
 
 // 0 = sin probar, 1 = O_EXCL funciona en este sistema de archivos, 2 = no
-namespace { int gExclMode = 0; }
+namespace {
+int gExclMode = 0;
+
+// contadores de escritura real a la SD (los de lectura estan en ZipBufferedIO.hpp)
+std::atomic<uint64_t> gWriteNs{ 0 };
+std::atomic<uint64_t> gWriteBytes{ 0 };
+
+// Ajustes de extraccion, para poder probar distintas combinaciones en la consola SIN recompilar.
+// Archivo opcional ".get/extraccion.cfg", una linea por ajuste:
+//   hilo=1          (1 = hilo de escritura en archivos grandes, 0 = escribir en el mismo hilo)
+//   bloque_kb=512   (tamaño de bloque al descomprimir/escribir archivos grandes, 128..16384)
+//   lectura_kb=256  (tamaño de las lecturas del zip, 64..16384)
+struct ExtractCfg
+{
+	bool async = true;
+	uint32_t blockKb = 512;
+	uint32_t readKb = 256;
+	bool loaded = false;
+};
+ExtractCfg gCfg;
+
+void loadExtractCfg()
+{
+	if (gCfg.loaded)
+		return;
+	gCfg.loaded = true;
+	FILE* f = fopen("./.get/extraccion.cfg", "r");
+	if (!f)
+		return;
+	char line[128];
+	while (fgets(line, sizeof(line), f))
+	{
+		char* eq = strchr(line, '=');
+		if (!eq)
+			continue;
+		*eq = 0;
+		long v = strtol(eq + 1, nullptr, 10);
+		std::string k(line);
+		if (k == "hilo")
+			gCfg.async = (v != 0);
+		else if (k == "bloque_kb" && v >= 128 && v <= 16384)
+			gCfg.blockKb = (uint32_t)v;
+		else if (k == "lectura_kb" && v >= 64 && v <= 16384)
+			gCfg.readKb = (uint32_t)v;
+	}
+	fclose(f);
+}
+} // namespace
 
 #if !defined(WIN32)
 #include "ZipBufferedIO.hpp"
@@ -165,6 +213,14 @@ UnZip::UnZip(const std::string& zipPath)
 {
 	printf("Unzip Path: %s\n", zipPath.c_str());
 	zipName = zipPath.substr(zipPath.find_last_of("/\\") == std::string::npos ? 0 : zipPath.find_last_of("/\\") + 1);
+	loadExtractCfg();
+#if !defined(WIN32)
+	zipio::gBlock = (uint64_t)gCfg.readKb * 1024;
+	snapReadNs = zipio::gReadNs.load();
+	snapReadBytes = zipio::gReadBytes.load();
+	snapWriteNs = gWriteNs.load();
+	snapWriteBytes = gWriteBytes.load();
+#endif
 #if !defined(WIN32)
 	// lectura con cache de dos ventanas (ver ZipBufferedIO.hpp); si por algo falla, la normal
 	fileToUnzip = zipio::openZip(zipPath);
@@ -209,11 +265,18 @@ void UnZip::Close()
 					remove(logPath); // que no crezca sin limite
 				if (FILE* lf = fopen(logPath, "a"))
 				{
-					fprintf(lf, "[%s] %llu archivos, %llu MB, total %.1f s | abrir/crear %.2f s | leer+descomprimir %.2f s | escribir %.2f s | cerrar %.2f s | archivos con hilo de escritura %llu | O_EXCL=%s\n",
+					const double rMB = (zipio::gReadBytes.load() - snapReadBytes) / 1048576.0;
+					const double rS = (zipio::gReadNs.load() - snapReadNs) / 1e9;
+					const double wMB = (gWriteBytes.load() - snapWriteBytes) / 1048576.0;
+					const double wS = (gWriteNs.load() - snapWriteNs) / 1e9;
+					fprintf(lf, "[%s] %llu archivos, %llu MB, total %.1f s | abrir/crear %.2f s | leer+descomprimir %.2f s | escribir(espera) %.2f s | cerrar %.2f s | hilo escritura: %llu archivos | O_EXCL=%s | cfg hilo=%d bloque=%uKB lectura=%uKB\n",
 							zipName.c_str(), (unsigned long long)statFiles, (unsigned long long)(statBytes >> 20),
 							totalMs / 1000.0, statOpenMs / 1000.0, statInflateMs / 1000.0, statWriteMs / 1000.0,
 							statCloseMs / 1000.0, (unsigned long long)statAsyncFiles,
-							gExclMode == 1 ? "si" : (gExclMode == 2 ? "no" : "?"));
+							gExclMode == 1 ? "si" : (gExclMode == 2 ? "no" : "?"),
+							(int)gCfg.async, gCfg.blockKb, gCfg.readKb);
+					fprintf(lf, "    SD lectura: %.0f MB en %.1f s (%.1f MB/s) | SD escritura: %.0f MB en %.1f s (%.1f MB/s)\n",
+							rMB, rS, rS > 0 ? rMB / rS : 0.0, wMB, wS, wS > 0 ? wMB / wS : 0.0);
 					fclose(lf);
 				}
 			}
@@ -549,6 +612,7 @@ private:
 
 			size_t off = 0;
 			bool bad = false;
+			const auto tw0 = std::chrono::steady_clock::now();
 			while (off < n)
 			{
 				ssize_t w = write(fd_, p + off, n - off);
@@ -559,6 +623,8 @@ private:
 				}
 				off += (size_t)w;
 			}
+			gWriteNs += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - tw0).count();
+			gWriteBytes += off;
 
 			lk.lock();
 			if (bad)
@@ -650,6 +716,8 @@ int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 
 	// small files don't need a big buffer (zips can have thousands of them)
 	u32 blocksize = 0x80000;
+	if (fileInfo.uncompressed_size >= 0x80000)
+		blocksize = gCfg.blockKb * 1024; // archivos grandes: bloque configurable (por defecto 512 KB)
 	if (fileInfo.uncompressed_size < blocksize)
 		blocksize = (fileInfo.uncompressed_size < 0x1000) ? 0x1000 : (u32)fileInfo.uncompressed_size;
 	u8* buffer = (u8*)aligned_alloc(0x1000, (blocksize + 0xFFF) & ~0xFFFu);
@@ -660,7 +728,7 @@ int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 	}
 	// archivos grandes: segundo bloque para descomprimir mientras se escribe el anterior
 	u8* buffer2 = nullptr;
-	if (fileInfo.uncompressed_size >= kAsyncMinSize)
+	if (gCfg.async && fileInfo.uncompressed_size >= kAsyncMinSize)
 		buffer2 = (u8*)aligned_alloc(0x1000, (blocksize + 0xFFF) & ~0xFFFu);
 
 	int fd = openForWrite(path);
@@ -762,7 +830,12 @@ int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 				}
 				off += writeBytes;
 			}
-			statWriteMs += msBetween(t1, clk::now());
+			{
+				const auto t2 = clk::now();
+				statWriteMs += msBetween(t1, t2);
+				gWriteNs += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+				gWriteBytes += (uint64_t)off;
+			}
 			done += off;
 		}
 	}

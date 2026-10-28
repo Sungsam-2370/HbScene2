@@ -332,8 +332,9 @@ void AppDetails::proceed()
 #if defined(SWITCH)
 		// si la descarga o la extraccion fallaron a medias, el archivo de
 		// "instalacion" (si llego a extraerse) tampoco se necesita: se borra solo ese archivo
-		if (!succeeded && !package->getInstallNsp().empty())
-			nspinstall::DeleteInstallFile(ROOT_PATH, package->getInstallNsp());
+		if (!succeeded)
+			for (const auto& f : package->getInstallList())
+				nspinstall::DeleteInstallFile(ROOT_PATH, f);
 #endif
 
 		// save the icon to the SD card, for offline use
@@ -356,22 +357,30 @@ void AppDetails::proceed()
 		// Paso explicito y SEPARADO de la descarga/extraccion de arriba.
 		// Solo corre si el paso 1+2 salio bien y el paquete realmente
 		// trae la clave "instalacion" en su repo.json.
-		bool nspStepNeeded = succeeded && !package->getInstallNsp().empty();
-		if (nspStepNeeded && package->runtime_used_delta)
+		// "instalacion" puede ser un archivo o una lista: se instalan en orden
+		std::vector<std::string> nspList;
+		if (succeeded)
+			nspList = package->getInstallList();
+		if (!nspList.empty() && package->runtime_used_delta)
 		{
-			// actualizacion incremental: el zip solo trae lo que cambio. Si el
-			// archivo de "instalacion" no vino en el zip, no hay nada nuevo que
-			// instalar (no es un error).
-			std::string rel = package->getInstallNsp();
-			while (!rel.empty() && rel.front() == '/')
-				rel.erase(0, 1);
-			struct stat nspStat = {};
-			if (stat((std::string(ROOT_PATH) + rel).c_str(), &nspStat) != 0)
+			// actualizacion incremental: el zip solo trae lo que cambio. Los
+			// archivos de "instalacion" que no esten en la SD se omiten (no es un
+			// error); si no queda ninguno, no hay nada nuevo que instalar.
+			std::vector<std::string> present;
+			for (const auto& f : nspList)
 			{
-				printf("--> Actualizacion incremental sin archivo de instalacion, se omite ese paso\n");
-				nspStepNeeded = false;
+				std::string rel = f;
+				while (!rel.empty() && rel.front() == '/')
+					rel.erase(0, 1);
+				struct stat nspStat = {};
+				if (stat((std::string(ROOT_PATH) + rel).c_str(), &nspStat) == 0)
+					present.push_back(f);
+				else
+					printf("--> Actualizacion incremental sin archivo de instalacion [%s], se omite\n", f.c_str());
 			}
+			nspList = present;
 		}
+		bool nspStepNeeded = !nspList.empty();
 			auto nspProgress = [](std::uint64_t done, std::uint64_t total, const std::string &, bool preparing) {
 					// reutiliza el mismo callback de progreso/heartbeat que
 					// ya usa la descarga -- todavia esta activo aca porque
@@ -429,8 +438,44 @@ void AppDetails::proceed()
 			nsInitialize();
 			nsextInitialize();
 
-			auto nspResult = nspinstall::InstallNspIfRequested(
-				ROOT_PATH, package->getInstallNsp(), false, nspProgress);
+			nspinstall::AutoInstallResult nspResult;
+			nspResult.success = true;
+			size_t nspDone = 0;
+			for (size_t i = 0; i < nspList.size(); i++)
+			{
+				if (nspList.size() > 1)
+				{
+					char txt[48];
+					snprintf(txt, sizeof(txt), "Instalando %d/%d...", (int)i + 1, (int)nspList.size());
+					downloadStatus.setText(txt);
+					downloadStatus.update();
+					downloadPercent.setText("0%");
+					downloadPercent.update();
+					downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+					downloadProgress.percent = 0;
+					RootDisplay::mainDisplay->render(NULL);
+				}
+
+				nspResult = nspinstall::InstallNspIfRequested(
+					ROOT_PATH, nspList[i], false, nspProgress);
+
+				// Ya intentamos instalar (bien o mal): el .nsp/.nsz/.xci extraido
+				// ya no se necesita en la SD, asi que se borra SOLO ese archivo.
+				nspinstall::DeleteInstallFile(ROOT_PATH, nspList[i]);
+				printf("--> Instalacion de NSP [%s]: %s\n",
+				       nspList[i].c_str(), nspResult.success ? "OK" : "FALLO");
+
+				if (!nspResult.success)
+				{
+					// se detiene en el primer fallo; los archivos restantes no se necesitan
+					for (size_t j = i + 1; j < nspList.size(); j++)
+						nspinstall::DeleteInstallFile(ROOT_PATH, nspList[j]);
+					break;
+				}
+				nspDone++;
+			}
+			if (nspResult.success && nspList.size() > 1)
+				nspResult.message = "INSTALACION EXITOSA (" + std::to_string(nspDone) + " archivos)";
 
 			nsextExit();
 			nsExit();
@@ -439,13 +484,7 @@ void AppDetails::proceed()
 			splCryptoExit();
 			splExit();
 
-			// Ya intentamos instalar (bien o mal): el .nsp/.nsz/.xci extraido
-			// ya no se necesita en la SD, asi que se borra SOLO ese archivo.
-			nspinstall::DeleteInstallFile(ROOT_PATH, package->getInstallNsp());
-
 			package->runtime_install_status = nspResult.message;
-			printf("--> Instalacion de NSP [%s]: %s\n",
-			       package->getInstallNsp().c_str(), nspResult.success ? "OK" : "FALLO");
 
 			if (!nspResult.success)
 				succeeded = false;
@@ -591,7 +630,7 @@ void AppDetails::proceed()
 			else
 			{
 				message = "Descarga, extraccion";
-				if (!package->getInstallNsp().empty() || !package->getDirectInstallUrl().empty())
+				if (!package->getInstallList().empty() || !package->getDirectInstallUrl().empty())
 					message += " e instalacion";
 				message += " completadas con exito.";
 			}

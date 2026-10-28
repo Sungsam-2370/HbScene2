@@ -170,10 +170,24 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 			package->zipUrl4 = cur["zip_url_4"].GetString();
 
 		// ruta del .nsp/.nsz/.xci a instalar automaticamente tras la
-		// extraccion; si no existe esta clave, install_nsp queda vacio
-		// y no se instala nada
+		// extraccion; si no existe esta clave, install_nsps queda vacio
+		// y no se instala nada. Acepta un texto ("a.nsp") o una lista
+		// (["a.nsp", "b.nsz"]); se instalan en ese orden.
 		if (cur.HasMember("instalacion"))
-			package->install_nsp = cur["instalacion"].GetString();
+		{
+			const auto& inst = cur["instalacion"];
+			if (inst.IsString())
+			{
+				if (inst.GetStringLength() > 0)
+					package->install_nsps.push_back(inst.GetString());
+			}
+			else if (inst.IsArray())
+			{
+				for (const auto& v : inst.GetArray())
+					if (v.IsString() && v.GetStringLength() > 0)
+						package->install_nsps.push_back(v.GetString());
+			}
+		}
 
 		// instalacion directa: URL de un .nsp/.nsz que se instala mientras se
 		// descarga (nunca se guarda en la SD). Es independiente de "instalacion".

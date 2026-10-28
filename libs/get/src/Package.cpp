@@ -897,13 +897,13 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 
 	// the file of the "instalacion" order (.nsp/.nsz/.xci) is deleted from the SD
 	// right after it is installed, so it is never "already on the SD card"
-	std::string installFilePath;
-	if (!this->install_nsp.empty())
+	std::vector<std::string> installFilePaths;
+	for (const auto& nsp : this->install_nsps)
 	{
-		std::string rel = this->install_nsp;
+		std::string rel = nsp;
 		while (!rel.empty() && rel.front() == '/')
 			rel.erase(0, 1);
-		installFilePath = std::string(ROOT_PATH) + rel;
+		installFilePaths.push_back(std::string(ROOT_PATH) + rel);
 	}
 
 	// los archivos del manifest nuevo que no vienen en este zip se dan por "sin
@@ -917,7 +917,7 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 			continue;
 		if (infoMap.find(entry.zip_path) != infoMap.end())
 			continue;
-		if (!installFilePath.empty() && entry.path == installFilePath)
+		if (std::find(installFilePaths.begin(), installFilePaths.end(), entry.path) != installFilePaths.end())
 			continue; // already installed and deleted: nothing to check
 
 		struct stat fileStat = {};

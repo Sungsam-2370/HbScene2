@@ -6,6 +6,7 @@
 #include "rapidjson/rapidjson.h"
 #include <optional>
 #include <string>
+#include <vector>
 #if defined(WII)
 #define ROOT_PATH "/"
 #elif defined(SWITCH)
@@ -113,12 +114,13 @@ public:
 		return long_desc;
 	}
 
-	// ruta (relativa a ROOT_PATH) del .nsp/.nsz/.xci a instalar
+	// rutas (relativas a ROOT_PATH) de los .nsp/.nsz/.xci a instalar
 	// automaticamente tras la extraccion, si el repo.json trae la clave
-	// "instalacion". Vacio si el paquete no la define -> no se instala nada.
-	[[nodiscard]] const std::string& getInstallNsp() const
+	// "instalacion" (un texto o una lista de textos). Vacio si el paquete no
+	// la define -> no se instala nada. Se instalan en el orden dado.
+	[[nodiscard]] const std::vector<std::string>& getInstallList() const
 	{
-		return install_nsp;
+		return install_nsps;
 	}
 
 	// URL del .nsp/.nsz a instalar directo desde internet ("instalacion_directa").
@@ -264,10 +266,10 @@ private:
 	std::string zipUrl2;  // optional second zip URL for split packages
 	std::string zipUrl3;  // optional third zip URL for split packages
 	std::string zipUrl4;  // optional fourth zip URL for split packages
-	std::string install_nsp; // "instalacion" en repo.json: ruta (relativa a
-	                          // ROOT_PATH) del .nsp/.nsz/.xci a instalar
-	                          // automaticamente. Vacio por defecto -> no se
-	                          // instala nada.
+	std::vector<std::string> install_nsps; // "instalacion" en repo.json: rutas
+	                          // (relativas a ROOT_PATH) de los .nsp/.nsz/.xci a
+	                          // instalar automaticamente, en orden. Vacio por
+	                          // defecto -> no se instala nada.
 	std::string direct_install_url; // "instalacion_directa" en repo.json
 	std::string install_message; // "mensaje"/"message" en repo.json:
 	                              // instruccion final post-instalacion.

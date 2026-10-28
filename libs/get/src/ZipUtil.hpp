@@ -63,5 +63,6 @@ private:
 	double statWriteMs = 0;   // escribir al destino (en archivos grandes: solo la espera que no se solapo)
 	double statCloseMs = 0;   // cerrar archivo destino y entrada
 	uint64_t statAsyncFiles = 0;
+	uint64_t snapReadNs = 0, snapReadBytes = 0, snapWriteNs = 0, snapWriteBytes = 0; // contadores de E/S al abrir
 	std::string zipName; // solo el nombre del archivo, para el registro de extraccion
 };
