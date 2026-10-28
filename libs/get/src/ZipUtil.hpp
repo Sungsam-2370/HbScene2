@@ -45,6 +45,7 @@ private:
 	std::string GetFullFileName(const unz_file_info_s& fileInfo);
 	unz_file_info_s GetFileInfo();
 	int ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo);
+	int openForWrite(const std::string& path); // crea/trunca el archivo de destino (anota los NUEVOS para poder cancelar)
 	unzFile fileToUnzip;
 	bool cpuBoosted = false;
 
@@ -56,4 +57,11 @@ private:
 	uint64_t statFiles = 0;
 	uint64_t statBytes = 0;
 	double statExtractMs = 0;
+	// desglose del tiempo (ms) dentro de Extract(), para saber donde se va
+	double statOpenMs = 0;    // abrir la entrada del zip + carpetas + crear el archivo destino
+	double statInflateMs = 0; // leer del zip + descomprimir
+	double statWriteMs = 0;   // escribir al destino (en archivos grandes: solo la espera que no se solapo)
+	double statCloseMs = 0;   // cerrar archivo destino y entrada
+	uint64_t statAsyncFiles = 0;
+	std::string zipName; // solo el nombre del archivo, para el registro de extraccion
 };

@@ -60,6 +60,23 @@ public:
 		}
 	}
 
+	// el archivo se acaba de CREAR (open con O_EXCL tuvo exito): se anota sin consultar el disco
+	void addFile(const std::string& path) { files_.push_back(path); }
+
+	// llamar una vez por carpeta ANTES de crearla: anota las que todavia no existen
+	void beforeDir(const std::string& dir)
+	{
+		struct stat st = {};
+		std::string p = dir;
+		while (!p.empty() && p.find('/') != std::string::npos)
+		{
+			if (stat(p.c_str(), &st) == 0)
+				break;
+			dirs_.push_back(p);
+			p = parent(p);
+		}
+	}
+
 	// borra lo que se creo, y las carpetas que quedaron vacias
 	void rollback()
 	{

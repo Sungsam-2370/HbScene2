@@ -16,6 +16,19 @@
 #include "ZipUtil.hpp"
 #include "Cancel.hpp"
 
+#include <condition_variable>
+#include <errno.h>
+#include <mutex>
+#include <thread>
+#include <sys/stat.h>
+
+// 0 = sin probar, 1 = O_EXCL funciona en este sistema de archivos, 2 = no
+namespace { int gExclMode = 0; }
+
+#if !defined(WIN32)
+#include "ZipBufferedIO.hpp"
+#endif
+
 #if defined(SWITCH)
 #include <switch.h>
 #endif
@@ -151,7 +164,13 @@ void Zip::Close()
 UnZip::UnZip(const std::string& zipPath)
 {
 	printf("Unzip Path: %s\n", zipPath.c_str());
-	fileToUnzip = unzOpen(zipPath.c_str());
+	zipName = zipPath.substr(zipPath.find_last_of("/\\") == std::string::npos ? 0 : zipPath.find_last_of("/\\") + 1);
+#if !defined(WIN32)
+	// lectura con cache de dos ventanas (ver ZipBufferedIO.hpp); si por algo falla, la normal
+	fileToUnzip = zipio::openZip(zipPath);
+	if (fileToUnzip == nullptr)
+#endif
+		fileToUnzip = unzOpen(zipPath.c_str());
 #if defined(SWITCH)
 	// inflating a big zip is CPU heavy: ask for the faster clock while we have it open
 	if (R_SUCCEEDED(appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad)))
@@ -177,6 +196,27 @@ void UnZip::Close()
 			printf("--> Extraction stats: %llu files, %llu MB, %.1f s inside Extract(), %.1f s total with the zip open\n",
 				   (unsigned long long)statFiles, (unsigned long long)(statBytes >> 20), statExtractMs / 1000.0,
 				   totalMs / 1000.0);
+			printf("--> Extraction breakdown (s): open/create %.2f | read+inflate %.2f | write %.2f | close %.2f | async files %llu\n",
+				   statOpenMs / 1000.0, statInflateMs / 1000.0, statWriteMs / 1000.0, statCloseMs / 1000.0,
+				   (unsigned long long)statAsyncFiles);
+
+			// ademas de la consola, se guarda en un archivo de texto (la app normalmente no tiene
+			// consola visible): .get/extraccion_log.txt, junto a la carpeta de paquetes
+			{
+				const char* logPath = "./.get/extraccion_log.txt";
+				struct stat lst = {};
+				if (stat(logPath, &lst) == 0 && lst.st_size > 200 * 1024)
+					remove(logPath); // que no crezca sin limite
+				if (FILE* lf = fopen(logPath, "a"))
+				{
+					fprintf(lf, "[%s] %llu archivos, %llu MB, total %.1f s | abrir/crear %.2f s | leer+descomprimir %.2f s | escribir %.2f s | cerrar %.2f s | archivos con hilo de escritura %llu | O_EXCL=%s\n",
+							zipName.c_str(), (unsigned long long)statFiles, (unsigned long long)(statBytes >> 20),
+							totalMs / 1000.0, statOpenMs / 1000.0, statInflateMs / 1000.0, statWriteMs / 1000.0,
+							statCloseMs / 1000.0, (unsigned long long)statAsyncFiles,
+							gExclMode == 1 ? "si" : (gExclMode == 2 ? "no" : "?"));
+					fclose(lf);
+				}
+			}
 		}
 	}
 #if defined(SWITCH)
@@ -349,7 +389,7 @@ int UnZip::ExtractAllWithProgress(const std::string& dirToExtract)
 		fileName += '/';
 		fileName += GetFullFileName(fileInfo);
 
-		if (fileInfo.uncompressed_size != 0)
+		if (!fileName.empty() && fileName.back() != '/')
 		{
 			if (Extract(fileName, fileInfo) == -9) return -9;
 
@@ -391,7 +431,10 @@ std::vector<std::string> UnZip::PathDump()
 
 		unz_file_info_s fileInfo = GetFileInfo();
 		std::string fileName = GetFullFileName(fileInfo);
-		if (fileInfo.uncompressed_size != 0 && fileInfo.compression_method != 0)
+		// solo se omiten las carpetas (terminan en '/'). Antes tambien se descartaban los archivos
+		// guardados SIN compresion (metodo 0) y los vacios, asi que en un zip sin manifest.install
+		// no se extraian (ej. .nro/.nsp "stored" o los archivos .flag vacios).
+		if (!fileName.empty() && fileName.back() != '/')
 		{
 			// printf("PathDump: %s\n", fileName.c_str());
 			paths.push_back(fileName);
@@ -451,18 +494,147 @@ int UnZip::Extract(const std::string& path, const unz_file_info_s& fileInfo)
 	return result;
 }
 
+// Escritor en segundo plano para archivos grandes: mientras el hilo principal
+// descomprime el siguiente bloque, este hilo escribe el anterior a la SD. La
+// escritura es una llamada bloqueante al servicio de archivos, asi que la CPU
+// queda libre para descomprimir en paralelo.
+namespace {
+class AsyncFileWriter
+{
+public:
+	explicit AsyncFileWriter(int fd) : fd_(fd), th_([this] { loop(); }) {}
+	~AsyncFileWriter() { finish(); }
+
+	// encola un bloque (espera a que termine la escritura anterior). false si ya hubo un error
+	bool submit(const uint8_t* p, size_t n)
+	{
+		std::unique_lock<std::mutex> lk(m_);
+		idle_.wait(lk, [this] { return !busy_; });
+		if (err_)
+			return false;
+		p_ = p;
+		n_ = n;
+		busy_ = true;
+		lk.unlock();
+		work_.notify_one();
+		return true;
+	}
+
+	// espera la ultima escritura y cierra el hilo; false si alguna fallo
+	bool finish()
+	{
+		{
+			std::unique_lock<std::mutex> lk(m_);
+			idle_.wait(lk, [this] { return !busy_; });
+			stop_ = true;
+		}
+		work_.notify_one();
+		if (th_.joinable())
+			th_.join();
+		return !err_;
+	}
+
+private:
+	void loop()
+	{
+		for (;;)
+		{
+			std::unique_lock<std::mutex> lk(m_);
+			work_.wait(lk, [this] { return busy_ || stop_; });
+			if (!busy_ && stop_)
+				return;
+			const uint8_t* p = p_;
+			size_t n = n_;
+			lk.unlock();
+
+			size_t off = 0;
+			bool bad = false;
+			while (off < n)
+			{
+				ssize_t w = write(fd_, p + off, n - off);
+				if (w <= 0)
+				{
+					bad = true;
+					break;
+				}
+				off += (size_t)w;
+			}
+
+			lk.lock();
+			if (bad)
+				err_ = true;
+			busy_ = false;
+			lk.unlock();
+			idle_.notify_all();
+		}
+	}
+
+	int fd_;
+	std::mutex m_;
+	std::condition_variable work_, idle_;
+	const uint8_t* p_ = nullptr;
+	size_t n_ = 0;
+	bool busy_ = false;
+	bool stop_ = false;
+	bool err_ = false;
+	std::thread th_; // se declara al final: arranca cuando ya existe todo lo demas
+};
+
+constexpr uint32_t kAsyncMinSize = 1536 * 1024; // a partir de aqui vale la pena el hilo de escritura
+} // namespace
+
+// Crea (o trunca) el archivo destino. Para poder deshacer una cancelacion hace falta saber
+// cuales archivos son NUEVOS; en vez de un stat() por archivo (una llamada mas al sistema
+// de archivos por cada uno, miles en un zip grande) se usa O_EXCL: si el open() crea el
+// archivo, es nuevo. Como no todos los sistemas de archivos respetan O_EXCL, la primera vez
+// se prueba con un archivo temporal; si no funciona, se usa el stat() de siempre.
+int UnZip::openForWrite(const std::string& path)
+{
+	if (gExclMode == 0)
+	{
+		const std::string probe = path + ".hbs_probe";
+		int a = open(probe.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0777);
+		int b = (a >= 0) ? open(probe.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0777) : -1;
+		const bool ok = (a >= 0 && b < 0 && errno == EEXIST);
+		if (a >= 0) close(a);
+		if (b >= 0) close(b);
+		if (a >= 0) unlink(probe.c_str());
+		gExclMode = ok ? 1 : 2;
+		printf("--> O_EXCL %s: se %s\n", ok ? "funciona" : "no es fiable", ok ? "evitan los stat() por archivo" : "usa stat() por archivo");
+	}
+
+	if (gExclMode == 1)
+	{
+		int fd = open(path.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0777);
+		if (fd >= 0)
+		{
+			g_libget_created.addFile(path); // lo creamos nosotros: es nuevo
+			return fd;
+		}
+		if (errno == EEXIST)
+			return open(path.c_str(), O_WRONLY | O_TRUNC, 0777); // ya existia: se sobreescribe
+		return -1;
+	}
+
+	g_libget_created.before(path); // anota solo si no existia
+	return open(path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0777);
+}
+
 int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 {
 	if (libget_cancelled())
 		return -9;
 
+	using clk = std::chrono::steady_clock;
+	auto msBetween = [](clk::time_point a, clk::time_point b) {
+		return std::chrono::duration<double, std::milli>(b - a).count();
+	};
+	const auto tOpen0 = clk::now();
+
 	if (unzOpenCurrentFile(fileToUnzip) != UNZ_OK)
 	{
 		return -2;
 	}
-
-	// anotar lo que vamos a crear, por si el usuario cancela
-	g_libget_created.before(path);
 
 	size_t last_slash_idx = path.find_last_of("/\\");
 	if (last_slash_idx != std::string::npos)
@@ -470,7 +642,10 @@ int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 		// only ask the filesystem once per folder (thousands of files share a few folders)
 		std::string dir = path.substr(0, last_slash_idx);
 		if (createdDirs.insert(dir).second)
+		{
+			g_libget_created.beforeDir(dir); // anota las carpetas que se van a crear (para cancelar)
 			CreateSubfolder(dir);
+		}
 	}
 
 	// small files don't need a big buffer (zips can have thousands of them)
@@ -483,58 +658,123 @@ int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 		unzCloseCurrentFile(fileToUnzip);
 		return -3;
 	}
-	int fd = open(path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0777);
+	// archivos grandes: segundo bloque para descomprimir mientras se escribe el anterior
+	u8* buffer2 = nullptr;
+	if (fileInfo.uncompressed_size >= kAsyncMinSize)
+		buffer2 = (u8*)aligned_alloc(0x1000, (blocksize + 0xFFF) & ~0xFFFu);
+
+	int fd = openForWrite(path);
 	if (fd == -1)
 	{
 		unzCloseCurrentFile(fileToUnzip);
 		cross_free(buffer);
+		if (buffer2) cross_free(buffer2);
 		return -4;
 	}
+	statOpenMs += msBetween(tOpen0, clk::now());
 
 	u32 done = 0;
 	bool failed = false;
-	while (done < fileInfo.uncompressed_size && !failed)
+
+	if (buffer2 != nullptr)
 	{
-		u32 want = blocksize;
-		if (done + want > fileInfo.uncompressed_size)
-			want = fileInfo.uncompressed_size - done;
-
-		// el usuario puede cancelar (B 5 s) incluso a mitad de un archivo grande
-		libget_poll();
-		if (libget_cancelled())
+		// ---- archivo grande: lectura+descompresion en este hilo, escritura en otro ----
+		statAsyncFiles++;
+		AsyncFileWriter writer(fd);
+		u8* bufs[2] = { buffer, buffer2 };
+		int cur = 0;
+		while (done < fileInfo.uncompressed_size && !failed)
 		{
-			failed = true;
-			break;
-		}
+			u32 want = blocksize;
+			if (done + want > fileInfo.uncompressed_size)
+				want = fileInfo.uncompressed_size - done;
 
-		int readBytes = unzReadCurrentFile(fileToUnzip, buffer, want);
-		if (readBytes <= 0)
-		{
-			// read/inflate error or truncated zip: never write garbage and call it a success
-			failed = true;
-			break;
-		}
-
-		// write() may write less than requested
-		int off = 0;
-		while (off < readBytes)
-		{
-			int writeBytes = write(fd, buffer + off, readBytes - off);
-			if (writeBytes <= 0)
+			libget_poll(); // el usuario puede cancelar (B 5 s) incluso a mitad de un archivo grande
+			if (libget_cancelled())
 			{
 				failed = true;
 				break;
 			}
-			off += writeBytes;
+
+			auto t0 = clk::now();
+			int readBytes = unzReadCurrentFile(fileToUnzip, bufs[cur], want);
+			statInflateMs += msBetween(t0, clk::now());
+			if (readBytes <= 0)
+			{
+				failed = true;
+				break;
+			}
+
+			// submit espera la escritura anterior (bufs[cur^1]); solo ese tiempo
+			// de espera cuenta como "write": el resto se solapo con la descompresion
+			auto t1 = clk::now();
+			bool queued = writer.submit(bufs[cur], (size_t)readBytes);
+			statWriteMs += msBetween(t1, clk::now());
+			if (!queued)
+			{
+				failed = true;
+				break;
+			}
+			cur ^= 1;
+			done += readBytes;
 		}
-		done += off;
+		auto t2 = clk::now();
+		if (!writer.finish())
+			failed = true;
+		statWriteMs += msBetween(t2, clk::now());
+	}
+	else
+	{
+		while (done < fileInfo.uncompressed_size && !failed)
+		{
+			u32 want = blocksize;
+			if (done + want > fileInfo.uncompressed_size)
+				want = fileInfo.uncompressed_size - done;
+
+			// el usuario puede cancelar (B 5 s) incluso a mitad de un archivo grande
+			libget_poll();
+			if (libget_cancelled())
+			{
+				failed = true;
+				break;
+			}
+
+			auto t0 = clk::now();
+			int readBytes = unzReadCurrentFile(fileToUnzip, buffer, want);
+			statInflateMs += msBetween(t0, clk::now());
+			if (readBytes <= 0)
+			{
+				// read/inflate error or truncated zip: never write garbage and call it a success
+				failed = true;
+				break;
+			}
+
+			// write() may write less than requested
+			auto t1 = clk::now();
+			int off = 0;
+			while (off < readBytes)
+			{
+				int writeBytes = write(fd, buffer + off, readBytes - off);
+				if (writeBytes <= 0)
+				{
+					failed = true;
+					break;
+				}
+				off += writeBytes;
+			}
+			statWriteMs += msBetween(t1, clk::now());
+			done += off;
+		}
 	}
 
 	// no fsync() here: it forced a flush to the SD card for every single file,
 	// which is very slow with many files. close() already hands the data to the filesystem.
+	auto tClose0 = clk::now();
 	close(fd);
 	cross_free(buffer);
+	if (buffer2) cross_free(buffer2);
 	unzCloseCurrentFile(fileToUnzip);
+	statCloseMs += msBetween(tClose0, clk::now());
 
 	if (done != fileInfo.uncompressed_size)
 	{
