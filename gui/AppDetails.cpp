@@ -1,5 +1,6 @@
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 #if defined(SWITCH)
 #include <switch.h>
@@ -704,7 +705,7 @@ bool AppDetails::isUninstall() const
 
 // Barra inferior: mismos colores/alto que la de la lista; los botones van planos
 // (solo icono + texto con el color del texto del tema). Abrir/Descargar/Borrar a
-// la izquierda y Cancelar (volver) fijo en el extremo derecho, como "Salir".
+// la derecha y Cancelar (volver) fijo en el extremo izquierdo.
 void AppDetails::layoutFooter()
 {
 #if !defined(_3DS) && !defined(_3DS_MOCK)
@@ -720,18 +721,36 @@ void AppDetails::layoutFooter()
 	const int footerY = SCREEN_HEIGHT - (SIDEBAR_FOOTER_HEIGHT - SIDEBAR_FOOTER_LINE) / 2 - cancel.height / 2;
 	const int gap = 24 / SCALER;
 
-	cancel.position(SCREEN_WIDTH - cancel.width - 20 / SCALER, footerY);
+	// Cancelar (volver) a la izquierda
+	cancel.position(20 / SCALER, footerY);
 
-	int nextX = 20 / SCALER;
-	if (start)
+	// el resto va pegado a la derecha, de izquierda a derecha:
+	//   Borrar, Abrir, Descargar/Actualizar (este ultimo en el extremo derecho)
+	// si el componente ya esta instalado, el boton principal (download) ES Borrar
+	// y por eso queda primero: Borrar, Abrir
+	std::vector<Button*> right;
+	if (package->getStatus() == INSTALLED)
 	{
-		start->position(nextX, footerY);
-		nextX += start->width + gap;
+		right.push_back(&download);
+		if (start)
+			right.push_back(start);
 	}
-	download.position(nextX, footerY);
-	nextX += download.width + gap;
-	if (hasRemoveBtn)
-		removeBtn.position(nextX, footerY);
+	else
+	{
+		if (hasRemoveBtn)
+			right.push_back(&removeBtn);
+		if (start)
+			right.push_back(start);
+		right.push_back(&download);
+	}
+
+	int nextX = SCREEN_WIDTH - 20 / SCALER;
+	for (int i = (int)right.size() - 1; i >= 0; i--)
+	{
+		nextX -= right[i]->width;
+		right[i]->position(nextX, footerY);
+		nextX -= gap;
+	}
 #endif
 }
 
