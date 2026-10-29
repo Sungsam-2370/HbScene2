@@ -256,29 +256,13 @@ void UnZip::Close()
 				   statOpenMs / 1000.0, statInflateMs / 1000.0, statWriteMs / 1000.0, statCloseMs / 1000.0,
 				   (unsigned long long)statAsyncFiles);
 
-			// ademas de la consola, se guarda en un archivo de texto (la app normalmente no tiene
-			// consola visible): .get/extraccion_log.txt, junto a la carpeta de paquetes
+			// versiones anteriores guardaban un log de texto aqui: se borra una sola vez
+			// (ya no se escribe nada en la SD, el desglose queda solo en la consola)
+			static bool oldLogRemoved = false;
+			if (!oldLogRemoved)
 			{
-				const char* logPath = "./.get/extraccion_log.txt";
-				struct stat lst = {};
-				if (stat(logPath, &lst) == 0 && lst.st_size > 200 * 1024)
-					remove(logPath); // que no crezca sin limite
-				if (FILE* lf = fopen(logPath, "a"))
-				{
-					const double rMB = (zipio::gReadBytes.load() - snapReadBytes) / 1048576.0;
-					const double rS = (zipio::gReadNs.load() - snapReadNs) / 1e9;
-					const double wMB = (gWriteBytes.load() - snapWriteBytes) / 1048576.0;
-					const double wS = (gWriteNs.load() - snapWriteNs) / 1e9;
-					fprintf(lf, "[%s] %llu archivos, %llu MB, total %.1f s | abrir/crear %.2f s | leer+descomprimir %.2f s | escribir(espera) %.2f s | cerrar %.2f s | hilo escritura: %llu archivos | O_EXCL=%s | cfg hilo=%d bloque=%uKB lectura=%uKB\n",
-							zipName.c_str(), (unsigned long long)statFiles, (unsigned long long)(statBytes >> 20),
-							totalMs / 1000.0, statOpenMs / 1000.0, statInflateMs / 1000.0, statWriteMs / 1000.0,
-							statCloseMs / 1000.0, (unsigned long long)statAsyncFiles,
-							gExclMode == 1 ? "si" : (gExclMode == 2 ? "no" : "?"),
-							(int)gCfg.async, gCfg.blockKb, gCfg.readKb);
-					fprintf(lf, "    SD lectura: %.0f MB en %.1f s (%.1f MB/s) | SD escritura: %.0f MB en %.1f s (%.1f MB/s)\n",
-							rMB, rS, rS > 0 ? rMB / rS : 0.0, wMB, wS, wS > 0 ? wMB / wS : 0.0);
-					fclose(lf);
-				}
+				oldLogRemoved = true;
+				remove("./.get/extraccion_log.txt");
 			}
 		}
 	}
