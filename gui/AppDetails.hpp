@@ -48,6 +48,7 @@ public:
 	static void pollCancelHook();
 
 	void proceed();
+	void removePackage();
 	void back();
 	void launch();
 
@@ -63,9 +64,17 @@ public:
 	bool quitAfterInstall = false;
 
 private:
+	// true si la operacion en curso es borrar (boton Borrar, o componente ya instalado)
+	bool isUninstall() const;
+	// acomoda los botones en la barra inferior
+	void layoutFooter();
+	bool forceUninstall = false;
+	bool hasRemoveBtn = false;
+
 	Button* start = nullptr;
 	TextElement* errorText = nullptr;
 	Button download;
+	Button removeBtn; // "Borrar" cuando hay una actualizacion pendiente
 	Button cancel;
 	TextElement details;
 	AppDetailsContent content;

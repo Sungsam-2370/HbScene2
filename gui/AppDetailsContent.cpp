@@ -10,6 +10,7 @@
 
 #include "../libs/chesto/src/RootDisplay.hpp"
 
+#include "Sidebar.hpp"
 #include "AppDetailsContent.hpp"
 #include "Feedback.hpp"
 #include "AppList.hpp"
@@ -256,7 +257,13 @@ bool AppDetailsContent::process(InputEvents* event)
 
 	ret = ret || ListElement::process(event);
 
-	int maxScrollOffset = screenshotsContainer.y + screenshotsContainer.height - SCREEN_HEIGHT + 100;
+	// la barra inferior de la pantalla de detalle tapa el borde de abajo: se deja ese espacio extra
+#if defined(_3DS) || defined(_3DS_MOCK)
+	const int footerSpace = 0;
+#else
+	const int footerSpace = SIDEBAR_FOOTER_HEIGHT;
+#endif
+	int maxScrollOffset = screenshotsContainer.y + screenshotsContainer.height - SCREEN_HEIGHT + 100 + footerSpace;
 
 	// make sure the max scroll offset is positive and snap <50 to 0
 	if (maxScrollOffset < 50) {

@@ -21,6 +21,8 @@
 
 #include "AppDetails.hpp"
 #include "AppList.hpp"
+#include "Sidebar.hpp"
+#include "FooterStyle.hpp"
 #include "MainDisplay.hpp"
 #include "Feedback.hpp"
 #include "ThemeManager.hpp"
@@ -38,14 +40,23 @@ static int gBHeldSince = 0;      // instante en que se presiono B (0 = no esta p
 static int gLastHintSecs = -2;   // ultimo estado mostrado en el aviso (para no redibujar de mas)
 static int gLastPollTick = 0;
 
+// Botones de la pantalla de detalle: en Switch/PC van en la barra inferior (planos, solo
+// icono + texto, igual que la lista); en 3DS se mantienen los botones de siempre.
+#if defined(_3DS) || defined(_3DS_MOCK)
+#define DETAILS_BTN_STYLE true, 30 / SCALER, 250
+#else
+#define DETAILS_BTN_STYLE false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f
+#endif
+
 AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	: package(&package)
 	, get(appList->get)
 	, appList(appList)
 	, appCard(appCard)
 	, downloadProgress()
-	, download(getAction(&package), package.getStatus() == INSTALLED ? X_BUTTON : A_BUTTON, true, 30 / SCALER, 250)
-	, cancel(i18n("details.cancel"), B_BUTTON, true, 30 / SCALER, 250)
+	, download(getAction(&package), package.getStatus() == INSTALLED ? X_BUTTON : A_BUTTON, DETAILS_BTN_STYLE)
+	, removeBtn(i18n("details.remove"), X_BUTTON, DETAILS_BTN_STYLE)
+	, cancel(i18n("details.cancel"), B_BUTTON, DETAILS_BTN_STYLE)
 	, details(getPackageDetails(&package).c_str(), 20 / SCALER, &white, false, 300)
 	, content(&package, appList->useBannerIcons)
 	, downloadStatus(i18n("details.status"), 30 / SCALER, &white)
@@ -56,11 +67,13 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 
 	// download/update/remove button (2)
 
-	download.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 170);
 	download.action = std::bind(&AppDetails::proceed, this);
-
-	cancel.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 90);
+	removeBtn.action = std::bind(&AppDetails::removePackage, this);
 	cancel.action = std::bind(&AppDetails::back, this);
+#if defined(_3DS) || defined(_3DS_MOCK)
+	download.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 170);
+	cancel.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 90);
+#endif
 
 	// La validacion del hash de sd:atmosphere/package3 (ver checkAtmosphereHash()
 	// en main.cpp) ya NO bloquea la aplicacion completa. Su alcance se redujo:
@@ -138,8 +151,10 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 
 	if (package.getStatus() != GET && (hasBinary || isTheme))
 	{
+#if defined(_3DS) || defined(_3DS_MOCK)
 		download.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 250);
 		cancel.position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 90);
+#endif
 
 		std::string buttonLabel = i18n("details.launch");
 		bool injectorPresent = false;
@@ -156,8 +171,10 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 		{
 			this->canLaunch = true;
 
-			start = new Button(buttonLabel, START_BUTTON, true, 30, 250);
+			start = new Button(buttonLabel, START_BUTTON, DETAILS_BTN_STYLE);
+#if defined(_3DS) || defined(_3DS_MOCK)
 			start->position(SCREEN_WIDTH - 310, SCREEN_HEIGHT - 170);
+#endif
 			start->action = std::bind(&AppDetails::launch, this);
 			super::append(start);
 		}
@@ -172,7 +189,15 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	super::append(&content);
 
 	super::append(&download);
+	// con una actualizacion pendiente el boton principal es "Actualizar"; tambien se
+	// puede borrar el componente (antes solo aparecia Borrar si estaba al dia)
+	if (package.getStatus() == UPDATE)
+	{
+		hasRemoveBtn = true;
+		super::append(&removeBtn);
+	}
 	super::append(&cancel);
+	layoutFooter();
 
 	downloadProgress.width = PANE_WIDTH;
 	downloadProgress.position(SCREEN_WIDTH / 2 - downloadProgress.width / 2, PANE_WIDTH / 2 - 5);
@@ -245,7 +270,7 @@ void AppDetails::proceed()
 	// Si el paquete trae la linea "aviso" en repo.json, se muestra antes de
 	// descargar: A / touch en "Aceptar" confirma, B / touch en "Cancelar" cancela.
 	// (al desinstalar no hace falta)
-	if (this->package->getStatus() != INSTALLED && !this->package->getNotice().empty())
+	if (!isUninstall() && !this->package->getNotice().empty())
 	{
 		bool confirmed = ((MainDisplay*)RootDisplay::mainDisplay)->showFullscreenPrompt(
 			"Aviso", this->package->getNotice(), true);
@@ -270,7 +295,7 @@ void AppDetails::proceed()
 	super::append(&downloadProgress);
 	super::append(&downloadStatus);
 	super::append(&downloadPercent);
-	if (this->package->getStatus() != INSTALLED) // al desinstalar no aplica
+	if (!isUninstall()) // al desinstalar no aplica
 	{
 		super::append(&cancelHint);
 		g_libget_poll = &AppDetails::pollCancelHook;
@@ -283,7 +308,7 @@ void AppDetails::proceed()
 	// if we're installing ourselves, we need to quit after on switch
 	preInstallHook();
 
-	bool wasUninstall = (this->package->getStatus() == INSTALLED);
+	bool wasUninstall = isUninstall();
 	bool succeeded = true;
 
 	// copia del registro actual del paquete (manifest.install + info.json), para
@@ -657,8 +682,57 @@ void AppDetails::proceed()
     // forzar re-evaluacion del status tras borrar
     this->package->updateStatus(get->mPkg_path);
 
+    this->forceUninstall = false;
     this->operating = false;
     this->appList->update();
+}
+
+// Borrar: quita el componente aunque tenga una actualizacion pendiente
+// (mismo proceso que el boton de borrar de un componente al dia)
+void AppDetails::removePackage()
+{
+	if (this->operating) return;
+	this->forceUninstall = true;
+	this->proceed();
+	this->forceUninstall = false;
+}
+
+bool AppDetails::isUninstall() const
+{
+	return forceUninstall || package->getStatus() == INSTALLED;
+}
+
+// Barra inferior: mismos colores/alto que la de la lista; los botones van planos
+// (solo icono + texto con el color del texto del tema). Abrir/Descargar/Borrar a
+// la izquierda y Cancelar (volver) fijo en el extremo derecho, como "Salir".
+void AppDetails::layoutFooter()
+{
+#if !defined(_3DS) && !defined(_3DS_MOCK)
+	const bool light = FooterStyle::iconsLight();
+	CST_Color* textColor = &HBAS::ThemeManager::textPrimary;
+
+	download.setFlat(true, light, textColor);
+	removeBtn.setFlat(true, light, textColor);
+	cancel.setFlat(true, light, textColor);
+	if (start)
+		start->setFlat(true, light, textColor);
+
+	const int footerY = SCREEN_HEIGHT - (SIDEBAR_FOOTER_HEIGHT - SIDEBAR_FOOTER_LINE) / 2 - cancel.height / 2;
+	const int gap = 24 / SCALER;
+
+	cancel.position(SCREEN_WIDTH - cancel.width - 20 / SCALER, footerY);
+
+	int nextX = 20 / SCALER;
+	if (start)
+	{
+		start->position(nextX, footerY);
+		nextX += start->width + gap;
+	}
+	download.position(nextX, footerY);
+	nextX += download.width + gap;
+	if (hasRemoveBtn)
+		removeBtn.position(nextX, footerY);
+#endif
 }
 
 void AppDetails::launch()
@@ -886,8 +960,45 @@ void AppDetails::render(Element* parent)
 	CST_SetDrawColor(RootDisplay::renderer, rightPanelColor);
 	CST_FillRect(RootDisplay::renderer, &rightPanelDimens);
 
+#if defined(_3DS) || defined(_3DS_MOCK)
 	// draw all elements
 	super::render(parent);
+#else
+	// necesario para que xAbs/yAbs esten al dia (antes lo hacia super::render)
+	this->recalcPosition(parent);
+
+	auto isFooterButton = [this](Element* e) {
+		return e == &download || e == &removeBtn || e == &cancel || (start != nullptr && e == start);
+	};
+
+	// 3. Contenido (banner, textos, capturas) y panel de detalles: recortados para que
+	// nunca dibujen encima de la barra inferior al hacer scroll
+	CST_Rect clip = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT };
+	SDL_RenderSetClipRect(RootDisplay::renderer, &clip);
+	for (Element* e : elements)
+		if (e == &details || e == &content)
+			e->render(this);
+	SDL_RenderSetClipRect(RootDisplay::renderer, NULL);
+
+	// 4. Barra inferior (mismos colores y linea que la de la lista)
+	CST_Rect footerRect = { 0, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT, SCREEN_WIDTH, SIDEBAR_FOOTER_HEIGHT };
+	CST_SetDrawColor(RootDisplay::renderer, HBAS::ThemeManager::sidebarFooterBg);
+	CST_FillRect(RootDisplay::renderer, &footerRect);
+	CST_Rect footerLineRect = { 0, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT, SCREEN_WIDTH, SIDEBAR_FOOTER_LINE };
+	CST_SetDrawColor(RootDisplay::renderer, FooterStyle::lineColor());
+	CST_FillRect(RootDisplay::renderer, &footerLineRect);
+
+	// 5. Botones de la barra
+	for (Element* e : elements)
+		if (isFooterButton(e))
+			e->render(this);
+
+	// 6. Todo lo demas (barra de progreso, avisos, captura a pantalla completa...)
+	// va encima de la barra, sin recorte
+	for (Element* e : elements)
+		if (e != &details && e != &content && !isFooterButton(e))
+			e->render(this);
+#endif
 }
 
 int AppDetails::updatePopupStatus(int status, int num, int num_total)

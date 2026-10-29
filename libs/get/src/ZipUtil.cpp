@@ -34,13 +34,13 @@ std::atomic<uint64_t> gWriteBytes{ 0 };
 // Ajustes de extraccion, para poder probar distintas combinaciones en la consola SIN recompilar.
 // Archivo opcional ".get/extraccion.cfg", una linea por ajuste:
 //   hilo=1          (1 = hilo de escritura en archivos grandes, 0 = escribir en el mismo hilo)
-//   bloque_kb=512   (tamaño de bloque al descomprimir/escribir archivos grandes, 128..16384)
-//   lectura_kb=256  (tamaño de las lecturas del zip, 64..16384)
+//   bloque_kb=2048  (tamaño de bloque al descomprimir/escribir archivos grandes, 128..16384)
+//   lectura_kb=2048 (tamaño de las lecturas del zip, 64..16384)
 struct ExtractCfg
 {
 	bool async = true;
-	uint32_t blockKb = 512;
-	uint32_t readKb = 256;
+	uint32_t blockKb = 2048;
+	uint32_t readKb = 2048;
 	bool loaded = false;
 };
 ExtractCfg gCfg;
@@ -717,7 +717,7 @@ int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 	// small files don't need a big buffer (zips can have thousands of them)
 	u32 blocksize = 0x80000;
 	if (fileInfo.uncompressed_size >= 0x80000)
-		blocksize = gCfg.blockKb * 1024; // archivos grandes: bloque configurable (por defecto 512 KB)
+		blocksize = gCfg.blockKb * 1024; // archivos grandes: bloque configurable (por defecto 2048 KB)
 	if (fileInfo.uncompressed_size < blocksize)
 		blocksize = (fileInfo.uncompressed_size < 0x1000) ? 0x1000 : (u32)fileInfo.uncompressed_size;
 	u8* buffer = (u8*)aligned_alloc(0x1000, (blocksize + 0xFFF) & ~0xFFFu);
