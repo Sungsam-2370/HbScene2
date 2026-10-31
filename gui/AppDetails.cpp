@@ -242,8 +242,7 @@ std::string AppDetails::getPackageDetails(Package* package)
 				 << i18n("details.license") << " " << package->getLicense() << "\n\n"
 				 // << i18n("details.downloads") << " " << i18n_number(package->getDownloadCount()) << "\n"
 				 << i18n("details.updated") << " " << i18n_date(package->getUpdatedAtTimestamp())<< "\n\n"
-				 << i18n("details.pagina") << "\n"
-				 << package->getPagina() << "\n\n"
+				 << i18n("details.pagina") << "\n" << package->getPagina() << "\n\n"	 
 				 << i18n("details.size") << " " << package->getHumanDownloadSize() << "\n";
 	return more_details.str();
 }
