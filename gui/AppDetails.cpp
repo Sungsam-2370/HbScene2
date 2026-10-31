@@ -235,13 +235,15 @@ std::string AppDetails::getPackageDetails(Package* package)
 {
 	// lots of details that we know about the package
 	std::stringstream more_details;
-	more_details << i18n("details.title") << " " << package->getTitle() << "\n"
-				 << package->getShortDescription() << "\n\n"
-				 << i18n("details.author") << " " << package->getAuthor() << "\n"
+	more_details << package->getTitle() << "\n\n"
+				 << i18n("details.author") << " " << package->getAuthor() << "\n\n"
+				 << package->getShortDescription() << "\n"
 				 << i18n("details.version") << " " << package->getVersion() << "\n\n"
 				 << i18n("details.license") << " " << package->getLicense() << "\n\n"
 				 // << i18n("details.downloads") << " " << i18n_number(package->getDownloadCount()) << "\n"
 				 << i18n("details.updated") << " " << i18n_date(package->getUpdatedAtTimestamp())<< "\n\n"
+				 << i18n("details.pagina") << "\n"
+				 << package->getPagina() << "\n\n"
 				 << i18n("details.size") << " " << package->getHumanDownloadSize() << "\n";
 	return more_details.str();
 }
