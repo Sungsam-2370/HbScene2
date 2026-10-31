@@ -308,8 +308,13 @@ void setPlatformPwd()
 }
 #endif
 
+std::string gRunningNroPath;
+
 int main(int argc, char* argv[])
 {
+	if (argc > 0 && argv != nullptr && argv[0] != nullptr)
+		gRunningNroPath = argv[0];
+
 	#ifdef WII
 	SYS_STDIO_Report(true);
 	#endif

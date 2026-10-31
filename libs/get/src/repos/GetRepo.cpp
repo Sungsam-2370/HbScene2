@@ -24,7 +24,7 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 
 	// fetch current repository json
 	std::string response;
-	bool success = downloadFileToMemory(directoryUrl, &response);
+	bool success = downloadFileToMemoryNoCache(directoryUrl, &response);
 
 #ifdef NETWORK_MOCK
 	mockPopulatePackages(&response);
@@ -40,7 +40,7 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 		directoryUrl = this->url + "/repo.json?nocache=" + std::to_string((long long)time(nullptr));
 
 		// retry fetch
-		success = downloadFileToMemory(directoryUrl, &response);
+		success = downloadFileToMemoryNoCache(directoryUrl, &response);
 	}
 
 	if (!success)

@@ -31,8 +31,8 @@ struct ObfStr {
 
 // URLs ofuscadas — inline constexpr garantiza una sola instancia en el binario
 // (a diferencia de static constexpr, que crea una copia por cada .cpp que incluye este header)
-inline constexpr auto _OBF_META_REPO   = ObfStr("https://raw.githubusercontent.com/Sungsam-2370/Epsilon/main");
-inline constexpr auto _OBF_SWITCH_REPO = ObfStr("https://raw.githubusercontent.com/Sungsam-2370/Epsilon/main");
+inline constexpr auto _OBF_META_REPO   = ObfStr("https://raw.githubusercontent.com/Sungsam-2370/Zeta/main");
+inline constexpr auto _OBF_SWITCH_REPO = ObfStr("https://raw.githubusercontent.com/Sungsam-2370/Zeta/main");
 inline constexpr auto _OBF_WIIU_REPO   = ObfStr("https://wiiu.cdn.fortheusers.org");
 inline constexpr auto _OBF_3DS_REPO    = ObfStr("https://3ds.apps.fortheusers.org");
 inline constexpr auto _OBF_WII_REPO    = ObfStr("https://hbb1.oscwii.org");
@@ -205,6 +205,9 @@ inline constexpr auto _OBF_MANUAL_ACCESS_FILE = ObfStr3("ApoyoGrupo0042.ini");
 // self-update: JSON con la version mas reciente publicada
 // SELF_UPDATE_URL concatena META_REPO (std::string) con el sufijo
 #define SELF_UPDATE_URL (META_REPO + "/version.json")
+
+// ruta del .nro que se esta ejecutando (argv[0]); la define main()
+extern std::string gRunningNroPath;
 
 // ruta absoluta del .nro en la SD (donde se reemplaza al actualizar)
 #define APP_NRO_PATH "sdmc:/switch/scene_eshop/scene_eshop.nro"

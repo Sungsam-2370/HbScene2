@@ -5,7 +5,11 @@
 #include <ogc/conf.h>
 #endif
 #include <cstdio>
+#include <cctype>
 #include <cstdint>
+#include <ctime>
+#include <cerrno>
+#include <cstring>
 #include <sys/stat.h>
 #include <sstream>
 #include <vector>
@@ -19,6 +23,7 @@
 #include "MainDisplay.hpp"
 #include "ThemeManager.hpp"
 #include "ToolsScreen.hpp"
+#include "ClockSync.hpp"
 #include "main.hpp"
 // gAtmosphereValid definido en main.cpp, declarado en main.hpp
 
@@ -134,6 +139,82 @@ void MainDisplay::hideSplash() {
 	}
 }
 
+// splash a pantalla completa + spinner (mismo aspecto que la carga inicial)
+void MainDisplay::showLoadingOverlay() {
+#if !defined(_3DS) && !defined(_3DS_MOCK)
+	if (!splashImage)
+	{
+		FILE* splashProbe = fopen(RAMFS "res/splash.png", "rb");
+		if (splashProbe)
+		{
+			fclose(splashProbe);
+			splashImage = new ImageElement(RAMFS "res/splash.png");
+			splashImage->resize(SCREEN_WIDTH, SCREEN_HEIGHT);
+			splashImage->position(0, 0);
+			super::append(splashImage);
+		}
+	}
+#endif
+	if (!spinner)
+	{
+		auto spinnerPath = RAMFS "res/spinner.png";
+#ifdef SWITCH
+		spinnerPath = RAMFS "res/spinner_red.png";
+#endif
+		spinner = new ImageElement(spinnerPath);
+		spinner->resize(90, 90);
+		if (splashImage)
+			spinner->constrain(ALIGN_TOP, SCREEN_HEIGHT * 26 / 100)->constrain(ALIGN_CENTER_HORIZONTAL, 0);
+		else
+			spinner->constrain(ALIGN_TOP, 90)->constrain(ALIGN_CENTER_HORIZONTAL, 0)->constrain(OFFSET_LEFT, 45);
+		super::append(spinner);
+	}
+}
+
+void MainDisplay::reloadList() {
+	// solo desde la lista (no mientras hay otra pantalla o la carga inicial)
+	if (reloading || RootDisplay::subscreen || showingSplash || get == nullptr)
+		return;
+	reloading = true;
+
+	showLoadingOverlay();
+	networking_callback = MainDisplay::updateLoader;
+	updateLoader(nullptr, 0.0); // dibuja ya el primer cuadro
+
+#if defined(SWITCH)
+	// si la hora de la consola esta mal, la descarga fallaria
+	ClockSync::syncSystemClock();
+#endif
+
+	// la lista actual solo se reemplaza si TODO llego bien; las tarjetas viejas se
+	// sueltan justo antes del cambio (apuntan a los paquetes anteriores)
+	bool ok = get->reload([this]() { appList.clearCards(); });
+
+	networking_callback = nullptr;
+	if (ok)
+		appList.update(); // se arma mientras el splash sigue encima
+
+	hideSplash();
+
+	if (!ok)
+	{
+		showFullscreenPrompt(
+			"No se pudo recargar",
+			"No se pudo descargar la lista de componentes.\n"
+			"Revisa tu conexion a internet e intentalo de nuevo.\n\n"
+			"Se mantiene la lista actual.",
+			false);
+	}
+
+	// descartar pulsaciones acumuladas durante la recarga (si no, un + repetido la lanzaria otra vez)
+	{
+		InputEvents flush;
+		while (flush.update()) { /* descartar */ }
+	}
+
+	reloading = false;
+}
+
 void MainDisplay::beginInitialLoad() {
 	networking_callback = nullptr;
 	
@@ -174,7 +255,7 @@ void MainDisplay::beginInitialLoad() {
 bool MainDisplay::checkMetaRepoForUpdates(Get* get) {
 	// download the metarepo (+1 network call)
 	std::string data("");
-	bool success = downloadFileToMemory(META_REPO + "/index.json", &data);
+	bool success = downloadFileToMemoryNoCache(META_REPO + "/index.json?nocache=" + std::to_string((long long)time(nullptr)), &data);
 
 	if (!success) {
 		// couldn't download the metarepo, so just return
@@ -286,8 +367,12 @@ static std::vector<int> parseVersionParts(const std::string& version)
 
 	while (std::getline(ss, part, '.'))
 	{
+		// ignora un prefijo no numerico ("v2" -> 2); lo que sigue al numero ("0-beta") se ignora
+		size_t start = 0;
+		while (start < part.size() && !std::isdigit((unsigned char)part[start]))
+			start++;
 		try {
-			parts.push_back(std::stoi(part));
+			parts.push_back(std::stoi(part.substr(start)));
 		} catch (...) {
 			parts.push_back(0); // parte no numerica, tratar como 0
 		}
@@ -478,6 +563,21 @@ bool MainDisplay::showFullscreenPrompt(const std::string& title, const std::stri
 	return confirmed;
 }
 
+// Ruta del .nro que se esta ejecutando (argv[0]). Si no se puede saber con seguridad,
+// la ruta de siempre. Asi la actualizacion reemplaza el archivo REAL del usuario aunque
+// lo tenga en otra carpeta o con otro nombre, en vez de crear una copia en otro lado.
+static std::string selfNroPath()
+{
+	const std::string& p = gRunningNroPath;
+	if (p.size() > 10 && p.rfind("sdmc:/", 0) == 0 && p.compare(p.size() - 4, 4, ".nro") == 0)
+	{
+		struct stat st = {};
+		if (stat(p.c_str(), &st) == 0 && S_ISREG(st.st_mode))
+			return p;
+	}
+	return APP_NRO_PATH;
+}
+
 bool MainDisplay::checkSelfUpdate()
 {
 #if !defined(SWITCH)
@@ -485,8 +585,9 @@ bool MainDisplay::checkSelfUpdate()
 	return false;
 #endif
 
+	// sin cache (el CDN puede tener una version.json vieja varios minutos)
 	std::string data;
-	bool success = downloadFileToMemory(SELF_UPDATE_URL, &data);
+	bool success = downloadFileToMemoryNoCache(SELF_UPDATE_URL + "?nocache=" + std::to_string((long long)time(nullptr)), &data);
 	if (!success) {
 		std::cout << "[self-update] no se pudo descargar version.json" << std::endl;
 		return false;
@@ -494,7 +595,9 @@ bool MainDisplay::checkSelfUpdate()
 
 	rapidjson::Document d;
 	d.Parse(data.c_str());
-	if (d.HasParseError() || !d.HasMember("version") || !d.HasMember("download_url")) {
+	if (d.HasParseError() || !d.IsObject() ||
+	    !d.HasMember("version") || !d["version"].IsString() ||
+	    !d.HasMember("download_url") || !d["download_url"].IsString()) {
 		std::cout << "[self-update] version.json invalido" << std::endl;
 		return false;
 	}
@@ -512,6 +615,11 @@ bool MainDisplay::checkSelfUpdate()
 	std::cout << "[self-update] nueva version disponible: " << remoteVersion
 	          << " (actual: " << APP_VERSION << ")" << std::endl;
 
+	// archivo real que se va a reemplazar, y los auxiliares junto a el
+	const std::string nroPath = selfNroPath();
+	const std::string tmpPath = nroPath + ".tmp";
+	const std::string oldPath = nroPath + ".old";
+
 	// --- Dialogo de confirmacion ---
 	std::string msg =
 		"Nueva version disponible: v" + remoteVersion + "\n"
@@ -524,7 +632,10 @@ bool MainDisplay::checkSelfUpdate()
 		return false;
 
 	// --- Descarga a archivo temporal ---
-	std::cout << "[self-update] descargando " << downloadUrl << " -> " << APP_NRO_TMP << std::endl;
+	std::cout << "[self-update] descargando " << downloadUrl << " -> " << tmpPath << std::endl;
+
+	// la carpeta del .nro tiene que existir (si el usuario lo mueve o la borra, la descarga fallaria)
+	mkpath(dir_name(tmpPath));
 
 	CST_Color white = { 0xFF, 0xFF, 0xFF, 0xFF };
 
@@ -557,7 +668,9 @@ bool MainDisplay::checkSelfUpdate()
 	networking_callback = MainDisplay::updateSelfUpdateProgress;
 	networking_callback_data = nullptr;
 
-	bool dlOk = downloadFileToDisk(downloadUrl, APP_NRO_TMP);
+	// un .tmp viejo (de un intento anterior que se corto) no debe mezclarse con esta descarga
+	std::remove(tmpPath.c_str());
+	bool dlOk = downloadFileToDisk(downloadUrl, tmpPath);
 
 	networking_callback = nullptr;
 	networking_callback_data = nullptr;
@@ -572,7 +685,7 @@ bool MainDisplay::checkSelfUpdate()
 	if (!dlOk) {
 		std::cout << "[self-update] fallo la descarga" << std::endl;
 		// Limpiar el .tmp si quedo a medias
-		std::remove(APP_NRO_TMP);
+		std::remove(tmpPath.c_str());
 
 		showFullscreenPrompt(
 			"Error de descarga",
@@ -594,12 +707,12 @@ bool MainDisplay::checkSelfUpdate()
 	// Un .nro funcional no puede ser menor a ~64KB (cabecera + codigo minimo).
 	// Una pagina de error 404 de GitHub suele ser ~10KB.
 	struct stat tmpStat = {};
-	bool tmpExists = (stat(APP_NRO_TMP, &tmpStat) == 0);
+	bool tmpExists = (stat(tmpPath.c_str(), &tmpStat) == 0);
 	if (!tmpExists || tmpStat.st_size < 65536) {
-		std::cout << "[self-update] .tmp demasiado pequeno (" 
-		          << (tmpExists ? tmpStat.st_size : 0) 
+		std::cout << "[self-update] .tmp demasiado pequeno ("
+		          << (tmpExists ? tmpStat.st_size : 0)
 		          << " bytes) - posible 404" << std::endl;
-		std::remove(APP_NRO_TMP);
+		std::remove(tmpPath.c_str());
 
 		showFullscreenPrompt(
 			"Archivo invalido",
@@ -614,12 +727,12 @@ bool MainDisplay::checkSelfUpdate()
 	// Verificacion 2: los bytes en offset 0x10 deben ser el magic "NRO0".
 	// Formato NRO de Switch (switchbrew.org/wiki/NRO):
 	//   offset 0x00: MOD0 offset (4 bytes)
-	//   offset 0x04: padding (4 bytes)  
+	//   offset 0x04: padding (4 bytes)
 	//   offset 0x08: padding (4 bytes)
 	//   offset 0x0C: padding (4 bytes)
 	//   offset 0x10: magic "NRO0" (4 bytes) <-- aqui verificamos
 	{
-		FILE* tmpFile = fopen(APP_NRO_TMP, "rb");
+		FILE* tmpFile = fopen(tmpPath.c_str(), "rb");
 		bool validNro = false;
 		if (tmpFile) {
 			uint8_t header[0x14] = {};
@@ -635,7 +748,7 @@ bool MainDisplay::checkSelfUpdate()
 
 		if (!validNro) {
 			std::cout << "[self-update] magic NRO0 no encontrado en .tmp - archivo corrupto o 404" << std::endl;
-			std::remove(APP_NRO_TMP);
+			std::remove(tmpPath.c_str());
 
 			showFullscreenPrompt(
 				"Archivo corrupto",
@@ -649,26 +762,68 @@ bool MainDisplay::checkSelfUpdate()
 		}
 	}
 
-	std::cout << "[self-update] .tmp validado correctamente (" 
+	// Verificacion 3: si el servidor informa el tamaño, el archivo debe tenerlo completo
+	// (una descarga cortada a medias seguiria teniendo un encabezado NRO valido)
+	if (d.HasMember("size") && d["size"].IsUint64() && d["size"].GetUint64() > 0 &&
+	    (uint64_t)tmpStat.st_size != d["size"].GetUint64()) {
+		std::cout << "[self-update] tamaño distinto al esperado: " << tmpStat.st_size
+		          << " vs " << d["size"].GetUint64() << std::endl;
+		std::remove(tmpPath.c_str());
+
+		showFullscreenPrompt(
+			"Descarga incompleta",
+			"El archivo descargado esta incompleto.\n"
+			"Intenta de nuevo.\n\n"
+			"Tu instalacion actual no fue modificada.",
+			false
+		);
+		return false;
+	}
+
+	std::cout << "[self-update] .tmp validado correctamente ("
 	          << tmpStat.st_size << " bytes, magic NRO0 OK)" << std::endl;
 
 	// --- Reemplazar el .nro ---
-	// En exFAT (Switch), rename() falla si el destino ya existe.
-	// Hay que borrar el .nro actual primero. Es seguro porque el .nro
-	// ya fue cargado completamente en RAM por nx-hbloader al iniciar.
-	std::remove(APP_NRO_PATH);
-	if (std::rename(APP_NRO_TMP, APP_NRO_PATH) != 0) {
-		std::cout << "[self-update] fallo el rename de .tmp a .nro: " << strerror(errno) << std::endl;
-		std::remove(APP_NRO_TMP);
+	// En exFAT (Switch), rename() falla si el destino ya existe, asi que el .nro actual
+	// primero se aparta (.old) y SOLO si el nuevo queda en su lugar se borra el viejo.
+	// (Antes se borraba el actual primero: si el rename fallaba despues, el usuario se
+	// quedaba sin la aplicacion.) Es seguro tocarlo porque nx-hbloader ya lo cargo en RAM.
+	std::remove(oldPath.c_str());
+	bool movedAside = (std::rename(nroPath.c_str(), oldPath.c_str()) == 0);
+	if (!movedAside) {
+		// plan B (como antes): borrar el actual
+		std::cout << "[self-update] no se pudo apartar el .nro actual: " << strerror(errno) << std::endl;
+		std::remove(nroPath.c_str());
+	}
 
-		std::string renameErr =
-			std::string("No se pudo reemplazar el archivo .nro.\n") +
-			"Error: " + strerror(errno) + "\n\n" +
-			"Ruta destino: " APP_NRO_PATH "\n\n" +
-			"Tu instalacion actual no fue modificada.";
+	if (std::rename(tmpPath.c_str(), nroPath.c_str()) != 0) {
+		const int renameErrno = errno;
+		std::cout << "[self-update] fallo el rename de .tmp a .nro: " << strerror(renameErrno) << std::endl;
+
+		// volver a dejar el .nro de antes en su sitio
+		const bool restored = movedAside && (std::rename(oldPath.c_str(), nroPath.c_str()) == 0);
+
+		std::string renameErr;
+		if (restored) {
+			std::remove(tmpPath.c_str());
+			renameErr =
+				std::string("No se pudo reemplazar el archivo .nro.\n") +
+				"Error: " + strerror(renameErrno) + "\n\n" +
+				"Ruta destino: " + nroPath + "\n\n" +
+				"Tu instalacion actual no fue modificada.";
+		} else {
+			// no se pudo restaurar: el archivo nuevo (ya validado) se deja por si hay que ponerlo a mano
+			renameErr =
+				std::string("No se pudo reemplazar el archivo .nro.\n") +
+				"Error: " + strerror(renameErrno) + "\n\n" +
+				"La nueva version quedo guardada como:\n" + tmpPath + "\n" +
+				"Renombrala a:\n" + nroPath;
+		}
 		showFullscreenPrompt("Error al aplicar update", renameErr, false);
 		return false;
 	}
+
+	std::remove(oldPath.c_str()); // el nuevo ya esta en su lugar
 
 	std::cout << "[self-update] actualizacion aplicada correctamente" << std::endl;
 
@@ -741,6 +896,12 @@ bool MainDisplay::process(InputEvents* event)
 #endif
 
 		networking_callback = MainDisplay::updateLoader;
+
+		// ANTES de cualquier descarga: si la hora de la consola esta mal, HTTPS falla
+		// (certificados) y no cargaria ni la lista ni las actualizaciones
+#if defined(SWITCH)
+		ClockSync::syncSystemClock();
+#endif
 
 		// fetch repositories metadata
 #if defined(WII)

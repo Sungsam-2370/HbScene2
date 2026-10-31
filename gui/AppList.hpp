@@ -41,6 +41,10 @@ public:
 	void reorient();
 	void toggleAudio();
 
+	// suelta todas las tarjetas (y con ellas las referencias a los paquetes); se usa
+	// justo antes de reemplazar la lista de paquetes al recargar
+	void clearCards();
+
 	bool touchMode = true;
 	bool needsUpdate = false;
 
@@ -87,6 +91,7 @@ private:
 	Button sortBtn;
 	Button keyboardBtn;
 	Button backspaceBtn;
+	Button reloadBtn; // "Recargar lista" (+): vuelve a descargar repo.json sin cache
 	TextElement nowPlayingText;
 
 #if defined(MUSIC)

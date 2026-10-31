@@ -2,6 +2,7 @@
 #define GET_H
 #include "./repos/Repo.hpp"
 #include "./repos/constants.h"
+#include <functional>
 #include <optional>
 #include <vector>
 #include <unordered_set>
@@ -30,6 +31,12 @@ public:
 	void addLocalRepo();
 	void removeDuplicates();
 	void update();
+
+	// Vuelve a descargar la lista de todos los repos habilitados SIN tocar la lista
+	// actual hasta que todo haya llegado bien. Si algun repo falla devuelve false y
+	// la lista queda como estaba. beforeSwap se llama justo antes de reemplazar la lista
+	// (la interfaz debe soltar ahi sus referencias a los paquetes viejos).
+	bool reload(const std::function<void()>& beforeSwap);
 
 	void saveRepos();
 	void addAndRemoveReposByURL(

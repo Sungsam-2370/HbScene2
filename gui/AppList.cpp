@@ -40,6 +40,7 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
 	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
 	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
+	, reloadBtn("Recargar lista", START_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
 	, nowPlayingText(" ", 16, &HBAS::ThemeManager::textPrimary)
 #if defined(MUSIC)
 	, nowPlayingIcon(RAMFS "res/nowplaying.png")
@@ -66,6 +67,7 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	sortBtn.isAbsolute = true;
 	keyboardBtn.isAbsolute = true;
 	backspaceBtn.isAbsolute = true;
+	reloadBtn.isAbsolute = true;
 	nowPlayingText.isAbsolute = true;
 	toolsBtn.isAbsolute = true;
 #if defined(MUSIC)
@@ -85,6 +87,11 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 
 	// additional buttons
 	sortBtn.action = std::bind(&AppList::cycleSort, this);
+
+	// Recargar lista (+): descarga de nuevo repo.json y rehace la lista
+	reloadBtn.action = []() {
+		((MainDisplay*)RootDisplay::mainDisplay)->reloadList();
+	};
 
 	// Abre el menu de Herramientas (Temas / Creditos / Limpieza de
 	// cache). El boton fisico R tambien se maneja en
@@ -607,6 +614,9 @@ void AppList::update()
 	{
 		// add additional buttons
 		super::append(&sortBtn);
+#if !defined(_3DS) && !defined(_3DS_MOCK)
+		super::append(&reloadBtn); // 3DS no tiene barra inferior
+#endif
 
 #if defined(MUSIC)
 		auto rootDisplay = RootDisplay::mainDisplay;
@@ -730,6 +740,7 @@ void AppList::positionChrome()
 		sortBtn.setFlat(true, light, textColor);
 		keyboardBtn.setFlat(true, light, textColor);
 		backspaceBtn.setFlat(true, light, textColor);
+		reloadBtn.setFlat(true, light, textColor);
 		toolsBtn.setFlat(true, light, textColor);
 #if defined(MUSIC)
 		muteBtn.setFlat(true, light, textColor);
@@ -756,6 +767,9 @@ void AppList::positionChrome()
 		toolsBtn.position(nextX, footerY);
 		nextX = toolsBtn.x + toolsBtn.width + gap;
 
+		reloadBtn.position(nextX, footerY);
+		nextX = reloadBtn.x + reloadBtn.width + gap;
+
 		sortBtn.position(nextX, footerY);
 		nextX = sortBtn.x + sortBtn.width + gap;
 
@@ -781,6 +795,13 @@ void AppList::positionChrome()
 	nowPlayingIcon.position(nowPlayingText.x - nowPlayingIcon.width - 5/SCALER, nowPlayingText.y);
 #endif
 #endif
+}
+
+void AppList::clearCards()
+{
+	this->highlighted = -1;
+	super::removeAll();
+	appCards.clear();
 }
 
 void AppList::reorient()

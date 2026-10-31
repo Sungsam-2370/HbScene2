@@ -79,6 +79,12 @@ public:
 	ImageElement *splashImage = nullptr; // imagen de pantalla completa durante la carga inicial
 	void hideSplash();                   // quita splash + spinner (carga lista o error)
 
+	// Recargar lista (boton +): vuelve a descargar repo.json (sin cache) y rehace la
+	// lista. Si falla se conserva la lista actual y se avisa.
+	void reloadList();
+	bool reloading = false;
+	void showLoadingOverlay();           // splash + spinner (carga inicial y recarga)
+
 	void playSFX();
 
 #if defined(MUSIC)

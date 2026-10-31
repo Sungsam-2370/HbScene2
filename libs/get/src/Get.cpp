@@ -397,6 +397,53 @@ void Get::update()
 	// });
 }
 
+bool Get::reload(const std::function<void()>& beforeSwap)
+{
+	printf("--> Reloading package list\n");
+
+	// un repo que fallo antes se vuelve a intentar
+	for (const auto& repo : repos)
+		repo->loaded = true;
+
+	std::vector<std::shared_ptr<Package>> fresh;
+	bool allOk = true;
+	int i = 0;
+	for (const auto& repo : repos)
+	{
+		if (repo->isEnabled())
+		{
+			if (libget_status_callback != nullptr)
+				libget_status_callback(STATUS_RELOADING, i + 1, (int32_t)repos.size());
+
+			for (auto& element : repo->loadPackages())
+			{
+				element->mRepo = repo;
+				fresh.push_back(std::move(element));
+			}
+			if (!repo->isLoaded())
+				allOk = false;
+		}
+		i++;
+	}
+
+	if (!allOk || fresh.empty())
+	{
+		printf("--> Reload failed, keeping the current list\n");
+		return false;
+	}
+
+	if (beforeSwap)
+		beforeSwap();
+
+	packages = std::move(fresh);
+	this->removeDuplicates();
+	for (const auto& package : packages)
+		package->updateStatus(mPkg_path);
+
+	printf("--> Reload complete, package count: %zu\n", packages.size());
+	return true;
+}
+
 int Get::validateRepos() const
 {
 	if (repos.empty())

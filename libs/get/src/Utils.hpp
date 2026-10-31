@@ -41,6 +41,7 @@ bool CreateSubfolder(std::string_view path);
 // networking stuff
 int init_networking();
 int deinit_networking();
+bool downloadFileToMemoryNoCache(const std::string& path, std::string* buffer);	// igual, pidiendo (Cache-Control: no-cache) que ningun cache intermedio responda con una copia vieja
 bool downloadFileToMemory(const std::string& path, std::string* buffer);				// writes to disk in BUF_SIZE chunks.
 
 // Guarda el ultimo error de curl en texto legible, para diagnostico en pantalla

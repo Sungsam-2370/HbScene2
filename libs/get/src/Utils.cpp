@@ -27,6 +27,8 @@
 #endif
 
 #include <algorithm>
+#include <atomic>
+#include <condition_variable>
 #include <deque>
 #include <vector>
 #include <cstdint>
@@ -37,11 +39,13 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <thread>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <iomanip>
@@ -412,6 +416,29 @@ bool downloadFileToMemory(const std::string& path, std::string* buffer)
 	return downloadFileCommon(path, buffer, nullptr);
 }
 
+// Igual que downloadFileToMemory, pero pide a los caches intermedios (CDN, proxys)
+// que no respondan con una copia guardada. Se usa para repo.json y version.json.
+bool downloadFileToMemoryNoCache(const std::string& path, std::string* buffer)
+{
+#ifndef NETWORK_MOCK
+	struct curl_slist* headers = nullptr;
+	headers = curl_slist_append(headers, "Cache-Control: no-cache");
+	headers = curl_slist_append(headers, "Pragma: no-cache");
+	if (curl)
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+	bool ok = downloadFileCommon(path, buffer, nullptr);
+
+	// downloadFileCommon ya dejo el handle limpio (HTTPHEADER = nullptr): ahora es seguro liberar
+	if (curl)
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, nullptr);
+	curl_slist_free_all(headers);
+	return ok;
+#else
+	return downloadFileCommon(path, buffer, nullptr);
+#endif
+}
+
 bool downloadFileToDisk(const std::string& remote_path, const std::string& local_path, bool resume)
 {
 	long resume_from = 0;
@@ -567,8 +594,9 @@ struct SegChunk
 {
 	std::string data;
 	size_t expected = 0;
-	bool done = false;
+	std::atomic<bool> done{false}; // set by the network thread, read by the writer thread
 	int retries = 0;
+	std::atomic<size_t> received{0}; // bytes of this chunk received so far (for progress)
 };
 
 static size_t SegProbeHeaderCallback(void* contents, size_t size, size_t nmemb, void* userp)
@@ -607,6 +635,7 @@ static size_t SegWriteCallback(void* contents, size_t size, size_t nmemb, void* 
 	if (chunk->data.size() + realsize > chunk->expected)
 		return 0;
 	chunk->data.append((char*)contents, realsize);
+	chunk->received.store(chunk->data.size(), std::memory_order_relaxed);
 	return realsize;
 }
 
@@ -687,7 +716,7 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 	// 3. set up chunks and workers
 	const curl_off_t remaining = total - start;
 	const long nchunks = (long)((remaining + SEG_CHUNK_SIZE - 1) / SEG_CHUNK_SIZE);
-	std::vector<SegChunk> chunks(nchunks);
+	std::vector<SegChunk> chunks((size_t)nchunks);
 	for (long i = 0; i < nchunks; i++)
 	{
 		curl_off_t b = start + (curl_off_t)i * SEG_CHUNK_SIZE;
@@ -735,10 +764,51 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 	}
 
 	long nextAssign = 0; // next never-requested chunk
-	long nextWrite = 0;  // next chunk to append to the file
 	std::deque<long> retryQueue;
-	curl_off_t written = start;
 	bool failed = false, aborted = false;
+
+	// The chunks are appended to the file by a separate thread, strictly in order, so the
+	// sockets keep being read while the SD card is busy (before, every fwrite stalled the
+	// network and the speed was 1/(1/net + 1/sd)). The file on disk is still always the
+	// exact prefix [0, written): the writer only stops between chunks.
+	std::atomic<long> nextWrite{0};         // next chunk to append (advanced by the writer)
+	std::atomic<curl_off_t> written{start}; // bytes already in the file
+	std::atomic<bool> writeFailed{false};
+	std::atomic<bool> writerStop{false};
+	std::mutex wMutex;
+	std::condition_variable wCv;
+	std::thread writer([&]() {
+		for (;;)
+		{
+			long idx = nextWrite.load();
+			if (idx >= nchunks)
+				return;
+			{
+				std::unique_lock<std::mutex> lk(wMutex);
+				wCv.wait(lk, [&] { return writerStop.load() || chunks[idx].done.load(); });
+				if (writerStop.load() || !chunks[idx].done.load())
+					return; // aborted/failed: do not write anything else
+			}
+			SegChunk& c = chunks[idx];
+			if (fwrite(c.data.data(), 1, c.data.size(), out) != c.data.size())
+			{
+				writeFailed = true;
+				return;
+			}
+			written += (curl_off_t)c.data.size();
+			std::string().swap(c.data); // free the memory
+			nextWrite = idx + 1;
+		}
+	});
+	auto stopWriter = [&]() {
+		{
+			std::lock_guard<std::mutex> lk(wMutex);
+			writerStop = true;
+		}
+		wCv.notify_all();
+		if (writer.joinable())
+			writer.join();
+	};
 
 	auto startChunk = [&](Worker& w, long idx)
 	{
@@ -806,13 +876,18 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 			bool ok = msg->data.result == CURLE_OK && http == 206 && c.data.size() == c.expected;
 			if (ok)
 			{
-				c.done = true;
+				{
+					std::lock_guard<std::mutex> lk(wMutex);
+					c.done = true;
+				}
+				wCv.notify_all();
 			}
 			else
 			{
 				printf("--> chunk %ld failed (curl=%d http=%ld got=%zu/%zu), retry %d\n", w->chunk,
 					   (int)msg->data.result, http, c.data.size(), c.expected, c.retries + 1);
 				gLastCurlErrorMsg = curl_easy_strerror(msg->data.result);
+				c.received = 0;
 				if (++c.retries > SEG_MAX_RETRIES)
 					failed = true;
 				else
@@ -821,19 +896,10 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 			w->chunk = -1;
 		}
 
-		// append finished chunks to the file, in order
-		while (!failed && nextWrite < nchunks && chunks[nextWrite].done)
+		if (writeFailed)
 		{
-			SegChunk& c = chunks[nextWrite];
-			if (fwrite(c.data.data(), 1, c.data.size(), out) != c.data.size())
-			{
-				gLastCurlErrorMsg = "write error (disk full?)";
-				failed = true;
-				break;
-			}
-			written += (curl_off_t)c.data.size();
-			std::string().swap(c.data); // free the memory
-			nextWrite++;
+			gLastCurlErrorMsg = "write error (disk full?)";
+			failed = true;
 		}
 
 		// progress (also lets the UI cancel the download)
@@ -841,7 +907,7 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 		{
 			curl_off_t have = written;
 			for (long i = nextWrite; i < nextAssign; i++)
-				have += (curl_off_t)chunks[i].data.size();
+				have += (curl_off_t)chunks[i].received.load(std::memory_order_relaxed);
 			double progress = (double)have / (double)total;
 			if (progress > 1.0)
 				progress = 1.0;
@@ -858,10 +924,25 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 		int numfds = 0;
 		curl_multi_wait(multi, nullptr, 0, 100, &numfds);
 		if (numfds == 0)
-			usleep(2000); // avoid spinning if there is nothing to wait on
+			usleep(running > 0 ? 2000 : 20000); // avoid spinning (all downloaded: just waiting for the writer)
 	}
 
 	// 4. cleanup
+	if (!failed && !aborted)
+	{
+		// every chunk was downloaded: wait for the writer to drain what is left
+		if (writer.joinable())
+			writer.join();
+		if (writeFailed)
+		{
+			gLastCurlErrorMsg = "write error (disk full?)";
+			failed = true;
+		}
+		else if (networking_callback != nullptr)
+			networking_callback(networking_callback_data, 1.0);
+	}
+	else
+		stopWriter(); // finishes the chunk it is writing (if any) and stops
 	for (auto& w : workers)
 	{
 		if (w.chunk >= 0)
@@ -877,7 +958,7 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 	{
 		printf("--> Segmented download %s at byte %lld\n", aborted ? "cancelled" : "failed", (long long)written);
 		// nothing received at all: maybe the server lies about Range support, let the regular path try
-		if (failed && written == start)
+		if (failed && written == start && !writeFailed)
 			*handled = false;
 		return false;
 	}
