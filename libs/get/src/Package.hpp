@@ -195,6 +195,12 @@ public:
 		return license;
 	}
 
+	// pagina web / enlace del aporte (campo opcional "pagina" del repo.json)
+	[[nodiscard]] const std::string& getPagina() const
+	{
+		return pagina;
+	}
+
 	[[nodiscard]] const std::string& getChangelog() const
 	{
 		return changelog;
@@ -259,6 +265,7 @@ private:
 	std::string version;
 
 	std::string license;
+	std::string pagina;
 	std::string changelog;
 
 	std::string sourceUrl;

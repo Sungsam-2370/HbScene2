@@ -177,6 +177,9 @@ void MainDisplay::reloadList() {
 		return;
 	reloading = true;
 
+	// el cursor (control fisico) estaba en la lista? se recuerda para devolverlo despues
+	const int prevHighlight = appList.highlighted;
+
 	showLoadingOverlay();
 	networking_callback = MainDisplay::updateLoader;
 	updateLoader(nullptr, 0.0); // dibuja ya el primer cuadro
@@ -195,6 +198,17 @@ void MainDisplay::reloadList() {
 		appList.update(); // se arma mientras el splash sigue encima
 
 	hideSplash();
+
+	// clearCards() deja highlighted = -1: sin esto, con control fisico nadie tiene el
+	// foco (ni la lista ni el menu lateral) y ya no se puede navegar. Si el foco no
+	// esta en el menu lateral y no se esta usando tactil, se devuelve a la lista.
+	if (appList.sidebar && appList.sidebar->highlighted < 0 && !appList.touchMode && appList.totalCount > 0)
+	{
+		int h = prevHighlight >= 0 ? prevHighlight : 0;
+		if (h >= appList.totalCount) h = appList.totalCount - 1;
+		appList.highlighted = h;
+		appList.y = 0;
+	}
 
 	if (!ok)
 	{

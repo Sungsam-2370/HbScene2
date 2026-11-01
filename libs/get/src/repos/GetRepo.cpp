@@ -117,6 +117,8 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 		// more information and details
 		if (cur.HasMember("license"))
 			package->license = cur["license"].GetString();
+		if (cur.HasMember("pagina") && cur["pagina"].IsString())
+			package->pagina = cur["pagina"].GetString();
 		if (cur.HasMember("changelog"))
 			package->changelog = std::regex_replace(cur["changelog"].GetString(), std::regex("\\\\n"), "\n");
 		if (cur.HasMember("url"))

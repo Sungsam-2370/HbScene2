@@ -29,6 +29,7 @@ Package::Package(int state)
 	this->long_desc = "N/A";
 
 	this->license = "";
+	this->pagina = "";
 	this->changelog = "";
 	this->url = "";
 	this->updated = "";
