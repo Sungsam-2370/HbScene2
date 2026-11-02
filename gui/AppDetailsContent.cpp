@@ -49,6 +49,7 @@ AppDetailsContent::AppDetailsContent(Package *package, bool useBannerIcons)
 	, moreByAuthor(i18n("contents.more"), R_BUTTON)
 	, title(package->getTitle().c_str(), 35, &HBAS::ThemeManager::textDescription)
 	, title2(package->getAuthor().c_str(), 27, &HBAS::ThemeManager::textSecondary)
+	, title3(" ", 20, &HBAS::ThemeManager::textSecondary)
 	, details(i18n("contents.placeholder1"), 20 / SCALER, &HBAS::ThemeManager::textDescription, false, PANE_WIDTH + 20 / SCALER)
 	, changelog(i18n("contents.placeholder2"), 20 / SCALER, &HBAS::ThemeManager::textDescription, false, PANE_WIDTH + 20 / SCALER)
 	, showFiles(i18n("contents.showinstalled"), ZL_BUTTON, false, 15)
@@ -77,6 +78,29 @@ AppDetailsContent::AppDetailsContent(Package *package, bool useBannerIcons)
 
 	title2.position(MARGIN, 80);
 	super::append(&title2);
+
+	// pagina del autor, debajo del autor y encima de la imagen (solo si el JSON la trae)
+	{
+		std::string page = package->getPagina();
+		for (auto& ch : page)
+			if (ch == '\n' || ch == '\r')
+				ch = ' ';
+		// recorta espacios de los extremos
+		size_t b = page.find_first_not_of(' ');
+		size_t e = page.find_last_not_of(' ');
+		page = (b == std::string::npos) ? std::string() : page.substr(b, e - b + 1);
+
+		if (!page.empty())
+		{
+			std::string label = i18n("contents.authorpage");
+			if (label == "contents.authorpage")
+				label = "Pagina Autor:";
+			title3.setText(label + "  " + page);
+			title3.update();
+			title3.position(MARGIN, title2.y + title2.height + 2);
+			super::append(&title3);
+		}
+	}
 
 	// the main description (wrapped text)
 	details.setText(getTrimmedDetails(this, package->getLongDescription()).c_str());

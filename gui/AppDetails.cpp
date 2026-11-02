@@ -50,13 +50,32 @@ static int gLastPollTick = 0;
 #define DETAILS_BTN_STYLE false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f
 #endif
 
+// Jerarquia: el boton principal (Descargar / Actualizar) lleva el texto mas grande que
+// los demas botones. Solo crece el texto: el icono conserva su tamano (se compensa iconScale).
+static constexpr int MAIN_BTN_EXTRA_TEXT = 6;
+static bool isMainDownloadAction(const Package& p)
+{
+	return p.getStatus() == GET || p.getStatus() == UPDATE;
+}
+#if defined(_3DS) || defined(_3DS_MOCK)
+#define DETAILS_MAIN_BTN_SIZE(p) 30 / SCALER
+#define DETAILS_MAIN_BTN_ICON(p) 1.5f
+#else
+#define DETAILS_MAIN_BTN_SIZE(p) (FOOTER_BTN_TEXT_SIZE + (isMainDownloadAction(p) ? MAIN_BTN_EXTRA_TEXT : 0))
+#define DETAILS_MAIN_BTN_ICON(p) (1.8f * FOOTER_BTN_TEXT_SIZE / (float)(FOOTER_BTN_TEXT_SIZE + (isMainDownloadAction(p) ? MAIN_BTN_EXTRA_TEXT : 0)))
+#endif
+
 AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	: package(&package)
 	, get(appList->get)
 	, appList(appList)
 	, appCard(appCard)
 	, downloadProgress()
+#if defined(_3DS) || defined(_3DS_MOCK)
 	, download(getAction(&package), package.getStatus() == INSTALLED ? X_BUTTON : A_BUTTON, DETAILS_BTN_STYLE)
+#else
+	, download(getAction(&package), package.getStatus() == INSTALLED ? X_BUTTON : A_BUTTON, false, DETAILS_MAIN_BTN_SIZE(package), 0, DETAILS_MAIN_BTN_ICON(package))
+#endif
 	, removeBtn(i18n("details.remove"), X_BUTTON, DETAILS_BTN_STYLE)
 	, cancel(i18n("details.cancel"), B_BUTTON, DETAILS_BTN_STYLE)
 	, details(getPackageDetails(&package).c_str(), 20 / SCALER, &white, false, 300)
@@ -314,7 +333,7 @@ std::string AppDetails::getPackageDetails(Package* package)
 				 // << i18n("details.downloads") << " " << i18n_number(package->getDownloadCount()) << "\n"
 				 << i18n("details.updated") << " " << i18n_date(package->getUpdatedAtTimestamp())<< "\n\n"
 				 << i18n("details.pagina") << "\n" << package->getPagina() << "\n\n"	 
-				 << i18n("details.size") << " " << package->getHumanDownloadSize() << "\n";
+				 << i18n("details.size") << " " << package->getHumanDownloadSize() << "\n\n";
 	return more_details.str();
 }
 
@@ -820,7 +839,8 @@ void AppDetails::layoutFooter()
 	for (int i = (int)right.size() - 1; i >= 0; i--)
 	{
 		nextX -= right[i]->width;
-		right[i]->position(nextX, footerY);
+		// centrados verticalmente en la barra (el boton principal es mas alto)
+		right[i]->position(nextX, footerY + (cancel.height - right[i]->height) / 2);
 		nextX -= gap;
 	}
 #endif

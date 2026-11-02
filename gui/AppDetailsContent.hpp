@@ -41,6 +41,7 @@ private:
 
 	TextElement title;
 	TextElement title2;
+	TextElement title3; // "Pagina Autor: ..." (campo "pagina" del repo.json)
 	TextElement details;
 	TextElement changelog;
 	Button showFiles;
