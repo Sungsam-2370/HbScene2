@@ -24,6 +24,8 @@ public:
 	CST_Color gray = { 0x50, 0x50, 0x50, 0xff };
 	CST_Color black = { 0x00, 0x00, 0x00, 0xff };
 	CST_Color white = { 0xFF, 0xFF, 0xFF, 0xff };
+	CST_Color sdGood = { 0x5C, 0xE0, 0x7A, 0xff }; // espacio suficiente (verde)
+	CST_Color sdBad = { 0xFF, 0x5A, 0x5A, 0xff };  // espacio insuficiente (rojo)
 
 	bool operating = false;
 	Package* package = NULL;
@@ -77,6 +79,8 @@ private:
 	Button removeBtn; // "Borrar" cuando hay una actualizacion pendiente
 	Button cancel;
 	TextElement details;
+	TextElement sdFree; // espacio libre en la SD
+	TextElement sdNeed; // espacio libre recomendado (descarga + extraido) x 1.3
 	AppDetailsContent content;
 	TextElement downloadStatus;
 	TextElement downloadPercent;

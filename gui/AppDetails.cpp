@@ -1,6 +1,7 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <sys/statvfs.h>
 
 #if defined(SWITCH)
 #include <switch.h>
@@ -59,6 +60,8 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	, removeBtn(i18n("details.remove"), X_BUTTON, DETAILS_BTN_STYLE)
 	, cancel(i18n("details.cancel"), B_BUTTON, DETAILS_BTN_STYLE)
 	, details(getPackageDetails(&package).c_str(), 20 / SCALER, &white, false, 300)
+	, sdFree(" ", 20 / SCALER, &white, false, 300)
+	, sdNeed(" ", 20 / SCALER, &white, false, 300)
 	, content(&package, appList->useBannerIcons)
 	, downloadStatus(i18n("details.status"), 30 / SCALER, &white)
 	, downloadPercent("0%", 24 / SCALER, &white)
@@ -185,6 +188,64 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 
 	details.position(SCREEN_WIDTH - 310, 50);
 	super::append(&details);
+
+	// espacio libre en la SD y espacio recomendado, debajo de los detalles
+	{
+		auto tr = [](const char* key, const char* fallback) {
+			std::string t = i18n(key);
+			return (t == key) ? std::string(fallback) : t;
+		};
+
+		// espacio libre real de la SD (la carpeta tmp de get vive en la SD)
+		uint64_t freeBytes = 0;
+		bool freeKnown = false;
+		if (get)
+		{
+			struct statvfs sv;
+			if (statvfs(get->mTmp_path.c_str(), &sv) == 0)
+			{
+				uint64_t unit = sv.f_frsize ? sv.f_frsize : sv.f_bsize;
+				freeBytes = (uint64_t)sv.f_bavail * unit;
+				freeKnown = true;
+			}
+		}
+
+		// recomendado:
+		//  - instalacion directa (solo "instalacion_directa", sin zip): descarga x 1.4
+		//  - instalacion normal por zip: (descarga + extraido) x 1.3
+		uint64_t baseBytes, recommended;
+		if (package.isDirectOnly())
+		{
+			baseBytes = package.getDownloadSize();
+			recommended = baseBytes + baseBytes * 4 / 10;
+		}
+		else
+		{
+			baseBytes = package.getDownloadSize() + package.getExtractedSize();
+			recommended = baseBytes + baseBytes * 3 / 10;
+		}
+		const bool needKnown = baseBytes > 0;
+
+		CST_Color* status = &white; // sin datos suficientes: color normal
+		if (freeKnown && needKnown)
+			status = (freeBytes >= recommended) ? &sdGood : &sdBad;
+
+		sdFree.setText(tr("details.sdfree", "Espacio libre en SD:") + "\n" +
+					   (freeKnown ? getHumanReadableBytes(freeBytes) : std::string("N/D")));
+		sdFree.setColorPtr(status);
+		sdFree.update();
+
+		sdNeed.setText(tr("details.sdrecommended", "Espacio recomendado:") + "\n" +
+					   (needKnown ? getHumanReadableBytes(recommended) : std::string("N/D")));
+		sdNeed.setColorPtr(status);
+		sdNeed.update();
+
+		const int gap = 12 / SCALER;
+		sdFree.position(SCREEN_WIDTH - 310, details.y + details.height + gap);
+		sdNeed.position(SCREEN_WIDTH - 310, sdFree.y + sdFree.height + gap);
+		super::append(&sdFree);
+		super::append(&sdNeed);
+	}
 
 	// the scrollable portion of the app details page
 	super::append(&content);
@@ -996,7 +1057,7 @@ void AppDetails::render(Element* parent)
 	CST_Rect clip = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT };
 	SDL_RenderSetClipRect(RootDisplay::renderer, &clip);
 	for (Element* e : elements)
-		if (e == &details || e == &content)
+		if (e == &details || e == &sdFree || e == &sdNeed || e == &content)
 			e->render(this);
 	SDL_RenderSetClipRect(RootDisplay::renderer, NULL);
 
@@ -1016,7 +1077,7 @@ void AppDetails::render(Element* parent)
 	// 6. Todo lo demas (barra de progreso, avisos, captura a pantalla completa...)
 	// va encima de la barra, sin recorte
 	for (Element* e : elements)
-		if (e != &details && e != &content && !isFooterButton(e))
+		if (e != &details && e != &sdFree && e != &sdNeed && e != &content && !isFooterButton(e))
 			e->render(this);
 #endif
 }
