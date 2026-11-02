@@ -61,7 +61,9 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	, cancel(i18n("details.cancel"), B_BUTTON, DETAILS_BTN_STYLE)
 	, details(getPackageDetails(&package).c_str(), 20 / SCALER, &white, false, 300)
 	, sdFree(" ", 20 / SCALER, &white, false, 300)
+	, sdFreeVal(" ", 20 / SCALER, &white, false, 300)
 	, sdNeed(" ", 20 / SCALER, &white, false, 300)
+	, sdNeedVal(" ", 20 / SCALER, &white, false, 300)
 	, content(&package, appList->useBannerIcons)
 	, downloadStatus(i18n("details.status"), 30 / SCALER, &white)
 	, downloadPercent("0%", 24 / SCALER, &white)
@@ -230,21 +232,29 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 		if (freeKnown && needKnown)
 			status = (freeBytes >= recommended) ? &sdGood : &sdBad;
 
-		sdFree.setText(tr("details.sdfree", "Espacio libre en SD:") + "\n" +
-					   (freeKnown ? getHumanReadableBytes(freeBytes) : std::string("N/D")));
-		sdFree.setColorPtr(status);
+		sdFree.setText(tr("details.sdfree", "Espacio libre en SD:"));
 		sdFree.update();
+		sdFreeVal.setText(freeKnown ? getHumanReadableBytes(freeBytes) : std::string("N/D"));
+		sdFreeVal.setColorPtr(status);
+		sdFreeVal.update();
 
-		sdNeed.setText(tr("details.sdrecommended", "Espacio recomendado:") + "\n" +
-					   (needKnown ? getHumanReadableBytes(recommended) : std::string("N/D")));
-		sdNeed.setColorPtr(status);
+		sdNeed.setText(tr("details.sdrecommended", "Espacio recomendado:"));
 		sdNeed.update();
+		sdNeedVal.setText(needKnown ? getHumanReadableBytes(recommended) : std::string("N/D"));
+		sdNeedVal.setColorPtr(status);
+		sdNeedVal.update();
 
 		const int gap = 12 / SCALER;
-		sdFree.position(SCREEN_WIDTH - 310, details.y + details.height + gap);
-		sdNeed.position(SCREEN_WIDTH - 310, sdFree.y + sdFree.height + gap);
+		const int tight = 2 / SCALER;
+		const int px = SCREEN_WIDTH - 310;
+		sdFree.position(px, details.y + details.height + gap);
+		sdFreeVal.position(px, sdFree.y + sdFree.height + tight);
+		sdNeed.position(px, sdFreeVal.y + sdFreeVal.height + gap);
+		sdNeedVal.position(px, sdNeed.y + sdNeed.height + tight);
 		super::append(&sdFree);
+		super::append(&sdFreeVal);
 		super::append(&sdNeed);
+		super::append(&sdNeedVal);
 	}
 
 	// the scrollable portion of the app details page
@@ -296,11 +306,11 @@ std::string AppDetails::getPackageDetails(Package* package)
 {
 	// lots of details that we know about the package
 	std::stringstream more_details;
-	more_details << package->getTitle() << "\n\n"
+	more_details << package->getTitle() << "\n"
 				 << i18n("details.author") << " " << package->getAuthor() << "\n\n"
 				 << package->getShortDescription() << "\n"
-				 << i18n("details.version") << " " << package->getVersion() << "\n\n"
-				 << i18n("details.license") << " " << package->getLicense() << "\n\n"
+				 << i18n("details.version") << " " << package->getVersion() << "\n"
+				 << i18n("details.license") << " " << package->getLicense() << "\n"
 				 // << i18n("details.downloads") << " " << i18n_number(package->getDownloadCount()) << "\n"
 				 << i18n("details.updated") << " " << i18n_date(package->getUpdatedAtTimestamp())<< "\n\n"
 				 << i18n("details.pagina") << "\n" << package->getPagina() << "\n\n"	 
@@ -1057,7 +1067,7 @@ void AppDetails::render(Element* parent)
 	CST_Rect clip = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT };
 	SDL_RenderSetClipRect(RootDisplay::renderer, &clip);
 	for (Element* e : elements)
-		if (e == &details || e == &sdFree || e == &sdNeed || e == &content)
+		if (e == &details || e == &sdFree || e == &sdFreeVal || e == &sdNeed || e == &sdNeedVal || e == &content)
 			e->render(this);
 	SDL_RenderSetClipRect(RootDisplay::renderer, NULL);
 
@@ -1077,7 +1087,7 @@ void AppDetails::render(Element* parent)
 	// 6. Todo lo demas (barra de progreso, avisos, captura a pantalla completa...)
 	// va encima de la barra, sin recorte
 	for (Element* e : elements)
-		if (e != &details && e != &sdFree && e != &sdNeed && e != &content && !isFooterButton(e))
+		if (e != &details && e != &sdFree && e != &sdFreeVal && e != &sdNeed && e != &sdNeedVal && e != &content && !isFooterButton(e))
 			e->render(this);
 #endif
 }

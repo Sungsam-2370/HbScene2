@@ -79,8 +79,10 @@ private:
 	Button removeBtn; // "Borrar" cuando hay una actualizacion pendiente
 	Button cancel;
 	TextElement details;
-	TextElement sdFree; // espacio libre en la SD
-	TextElement sdNeed; // espacio libre recomendado (descarga + extraido) x 1.3
+	TextElement sdFree;    // titulo: espacio libre en la SD (siempre blanco)
+	TextElement sdFreeVal; // cantidad (verde / rojo)
+	TextElement sdNeed;    // titulo: espacio recomendado (siempre blanco)
+	TextElement sdNeedVal; // cantidad (verde / rojo)
 	AppDetailsContent content;
 	TextElement downloadStatus;
 	TextElement downloadPercent;
