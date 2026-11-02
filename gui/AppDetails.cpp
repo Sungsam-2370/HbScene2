@@ -52,7 +52,7 @@ static int gLastPollTick = 0;
 
 // Jerarquia: el boton principal (Descargar / Actualizar) lleva el texto mas grande que
 // los demas botones. Solo crece el texto: el icono conserva su tamano (se compensa iconScale).
-static constexpr int MAIN_BTN_EXTRA_TEXT = 6;
+static constexpr int MAIN_BTN_EXTRA_TEXT = 8; // 16 + 8 = 24
 static bool isMainDownloadAction(const Package& p)
 {
 	return p.getStatus() == GET || p.getStatus() == UPDATE;
@@ -266,10 +266,11 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 		const int gap = 12 / SCALER;
 		const int tight = 2 / SCALER;
 		const int px = SCREEN_WIDTH - 310;
-		sdFree.position(px, details.y + details.height + gap);
-		sdFreeVal.position(px, sdFree.y + sdFree.height + tight);
-		sdNeed.position(px, sdFreeVal.y + sdFreeVal.height + gap);
+		// primero el recomendado, despues el libre
+		sdNeed.position(px, details.y + details.height + gap);
 		sdNeedVal.position(px, sdNeed.y + sdNeed.height + tight);
+		sdFree.position(px, sdNeedVal.y + sdNeedVal.height + gap);
+		sdFreeVal.position(px, sdFree.y + sdFree.height + tight);
 		super::append(&sdFree);
 		super::append(&sdFreeVal);
 		super::append(&sdNeed);
@@ -325,14 +326,13 @@ std::string AppDetails::getPackageDetails(Package* package)
 {
 	// lots of details that we know about the package
 	std::stringstream more_details;
-	more_details << package->getTitle() << "\n"
+	more_details << package->getTitle() << "\n\n"
 				 << i18n("details.author") << " " << package->getAuthor() << "\n\n"
 				 << package->getShortDescription() << "\n"
-				 << i18n("details.version") << " " << package->getVersion() << "\n"
-				 << i18n("details.license") << " " << package->getLicense() << "\n"
+				 << i18n("details.version") << " " << package->getVersion() << "\n\n"
+				 << i18n("details.license") << " " << package->getLicense() << "\n\n"
 				 // << i18n("details.downloads") << " " << i18n_number(package->getDownloadCount()) << "\n"
-				 << i18n("details.updated") << " " << i18n_date(package->getUpdatedAtTimestamp())<< "\n\n"
-				 << i18n("details.pagina") << "\n" << package->getPagina() << "\n\n"	 
+				 << i18n("details.updated") << " " << i18n_date(package->getUpdatedAtTimestamp())<< "\n\n"	 
 				 << i18n("details.size") << " " << package->getHumanDownloadSize() << "\n\n";
 	return more_details.str();
 }
