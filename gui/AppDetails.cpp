@@ -257,7 +257,7 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 		sdFreeVal.setColorPtr(status);
 		sdFreeVal.update();
 
-		sdNeed.setText(tr("details.sdrecommended", "Espacio recomendado:"));
+		sdNeed.setText(tr("details.sdrecommended", "Espacio libre recomendado:"));
 		sdNeed.update();
 		sdNeedVal.setText(needKnown ? getHumanReadableBytes(recommended) : std::string("N/D"));
 		sdNeedVal.setColorPtr(status);
