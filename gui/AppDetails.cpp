@@ -52,7 +52,7 @@ static int gLastPollTick = 0;
 
 // Jerarquia: el boton principal (Descargar / Actualizar) lleva el texto mas grande que
 // los demas botones. Solo crece el texto: el icono conserva su tamano (se compensa iconScale).
-static constexpr int MAIN_BTN_EXTRA_TEXT = 8; // 16 + 8 = 24
+static constexpr int MAIN_BTN_EXTRA_TEXT = 10; // 16 + 10 = 26
 static bool isMainDownloadAction(const Package& p)
 {
 	return p.getStatus() == GET || p.getStatus() == UPDATE;

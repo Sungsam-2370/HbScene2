@@ -68,7 +68,7 @@ AppDetailsContent::AppDetailsContent(Package *package, bool useBannerIcons)
 	, screenshotsContainer(COL_LAYOUT, 20)
 	, viewSSButton(i18n("contents.readmore"), Y_BUTTON, false, 15)
 {
-	title.position(MARGIN, 20);
+	title.position(MARGIN, 10);
 	super::append(&title);
 
 	banner.setScaleMode(SCALE_PROPORTIONAL_WITH_BG);
@@ -76,7 +76,7 @@ AppDetailsContent::AppDetailsContent(Package *package, bool useBannerIcons)
 	banner.position(BANNER_X / SCALER - 26, BANNER_Y);
 	super::append(&banner);
 
-	title2.position(MARGIN, 70);
+	title2.position(MARGIN, 60);
 	super::append(&title2);
 
 	// pagina del autor, debajo del autor y encima de la imagen (solo si el JSON la trae)
