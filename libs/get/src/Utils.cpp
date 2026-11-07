@@ -137,6 +137,14 @@ int sockopt_callback(void* clientp __attribute__((unused)), curl_socket_t curlfd
 	setsockopt(curlfd, SOL_SOCKET, SO_WINSCALE, &winscale, sizeof(int));
 	setsockopt(curlfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(int));
 	setsockopt(curlfd, SOL_SOCKET, SO_TCPSACK, &tcpsack, sizeof(int));
+#if defined(SWITCH) && defined(SO_LINGER)
+	// cerrar el socket al instante (sin esperar el cierre ordenado) para liberar
+	// rapido su memoria del pool. Prueba: se quita si no mejora nada.
+	struct linger lg;
+	lg.l_onoff = 1;
+	lg.l_linger = 0;
+	setsockopt(curlfd, SOL_SOCKET, SO_LINGER, &lg, sizeof(lg));
+#endif
 #endif
 	return 0;
 }
@@ -587,7 +595,7 @@ bool getRemoteFileMetadata(const std::string& remote_path, download_metadata_t* 
 // ---------------------------------------------------------------------------
 #define SEG_MIN_SIZE      (8LL * 1024 * 1024) // smaller files use the regular path
 #define SEG_CHUNK_SIZE    (4LL * 1024 * 1024) // bytes requested per Range request
-#define SEG_WINDOW_CHUNKS 8                   // max chunks in memory at once
+#define SEG_WINDOW_CHUNKS 16                  // max chunks in memory at once (16 x 4 MB = 64 MB)
 #define SEG_MAX_RETRIES   3
 
 struct SegProbe
@@ -1130,10 +1138,25 @@ int init_networking()
 		cfg.tcp_rx_buf_size     = 0x100000; // 1MB
 		cfg.tcp_tx_buf_max_size = 0x40000;
 		cfg.tcp_rx_buf_max_size = 0x100000; // 1MB
-		cfg.sb_efficiency       = 4;
-		if (R_FAILED(socketInitialize(&cfg)))
+		// sb_efficiency multiplica el pool de memoria de los sockets (~1.3 MB x valor):
+		// 8 = ~10 MB. Si no hay memoria se prueba con 4 (~5 MB) y, como ultimo recurso,
+		// con la configuracion de fabrica.
+		bool socketsOk = false;
+		const u32 efficiencies[] = { 8, 4 };
+		for (u32 eff : efficiencies)
+		{
+			cfg.sb_efficiency = eff;
+			if (R_SUCCEEDED(socketInitialize(&cfg)))
+			{
+				printf("--> Sockets: sb_efficiency=%u\n", (unsigned)eff);
+				socketsOk = true;
+				break;
+			}
+		}
+		if (!socketsOk)
 		{
 			// not enough memory (e.g. applet mode)? fall back to the stock config
+			printf("--> Sockets: configuracion de fabrica\n");
 			socketInitializeDefault();
 		}
 	}
