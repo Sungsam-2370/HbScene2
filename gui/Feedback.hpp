@@ -7,7 +7,6 @@
 #include "../libs/chesto/src/ImageElement.hpp"
 #include "../libs/chesto/src/TextElement.hpp"
 #include "../libs/chesto/src/NetImageElement.hpp"
-#include "../libs/chesto/src/EKeyboard.hpp"
 
 class Feedback : public Element
 {
@@ -22,17 +21,16 @@ public:
 
 	void submit();
 	void back();
+	void edit(); // abre el teclado del sistema para escribir / editar el mensaje
 
 private:
-	void keyboardInputCallback();
+	std::string message; // texto del mensaje (lo escribe el teclado del sistema)
 
 	TextElement title;
 	NetImageElement icon;
-	EKeyboard keyboard;
 	Button quit;
 	Button send;
-	Button backspaceBtn;
-	Button capsBtn;
+	Button writeBtn;
 	TextElement response;
 	TextElement feedback;
 };

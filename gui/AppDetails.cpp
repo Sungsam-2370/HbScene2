@@ -42,6 +42,11 @@ static int gBHeldSince = 0;      // instante en que se presiono B (0 = no esta p
 static int gLastHintSecs = -2;   // ultimo estado mostrado en el aviso (para no redibujar de mas)
 static int gLastPollTick = 0;
 
+// medidor de velocidad: ultima muestra (instante y bytes) y valor suavizado
+static int gSpeedLastTick = 0;
+static unsigned long long gSpeedLastBytes = 0;
+static double gSpeedMBs = 0.0;
+
 // Botones de la pantalla de detalle: en Switch/PC van en la barra inferior (planos, solo
 // icono + texto, igual que la lista); en 3DS se mantienen los botones de siempre.
 #if defined(_3DS) || defined(_3DS_MOCK)
@@ -65,6 +70,46 @@ static bool isMainDownloadAction(const Package& p)
 #define DETAILS_MAIN_BTN_ICON(p) (1.8f * FOOTER_BTN_TEXT_SIZE / (float)(FOOTER_BTN_TEXT_SIZE + (isMainDownloadAction(p) ? MAIN_BTN_EXTRA_TEXT : 0)))
 #endif
 
+// --- espacio en la SD ---
+// Una sola fuente de numeros para el panel del detalle y para el aviso previo a descargar.
+//  - minimum: lo estrictamente necesario (directa: descarga; zip: descarga + extraido)
+//  - recommended: minimo + margen (directa x1.4, zip x1.3)
+struct SdSpace
+{
+	uint64_t freeBytes = 0;
+	uint64_t minimum = 0;
+	uint64_t recommended = 0;
+	bool freeKnown = false;
+	bool needKnown = false;
+};
+
+static SdSpace computeSdSpace(Get* get, const Package& package)
+{
+	SdSpace r;
+	if (get)
+	{
+		struct statvfs sv;
+		if (statvfs(get->mTmp_path.c_str(), &sv) == 0)
+		{
+			uint64_t unit = sv.f_frsize ? sv.f_frsize : sv.f_bsize;
+			r.freeBytes = (uint64_t)sv.f_bavail * unit;
+			r.freeKnown = true;
+		}
+	}
+	if (package.isDirectOnly())
+	{
+		r.minimum = package.getDownloadSize();
+		r.recommended = r.minimum + r.minimum * 4 / 10;
+	}
+	else
+	{
+		r.minimum = package.getDownloadSize() + package.getExtractedSize();
+		r.recommended = r.minimum + r.minimum * 3 / 10;
+	}
+	r.needKnown = r.minimum > 0;
+	return r;
+}
+
 AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	: package(&package)
 	, get(appList->get)
@@ -87,6 +132,7 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	, downloadStatus(i18n("details.status"), 30 / SCALER, &white)
 	, downloadPercent("0%", 24 / SCALER, &white)
 	, cancelHint("Manten B 5 s para cancelar", 20 / SCALER, &white)
+	, downloadSpeed(" ", 20 / SCALER, &white)
 {
 	// TODO: show current app status somewhere
 
@@ -217,35 +263,11 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 			return (t == key) ? std::string(fallback) : t;
 		};
 
-		// espacio libre real de la SD (la carpeta tmp de get vive en la SD)
-		uint64_t freeBytes = 0;
-		bool freeKnown = false;
-		if (get)
-		{
-			struct statvfs sv;
-			if (statvfs(get->mTmp_path.c_str(), &sv) == 0)
-			{
-				uint64_t unit = sv.f_frsize ? sv.f_frsize : sv.f_bsize;
-				freeBytes = (uint64_t)sv.f_bavail * unit;
-				freeKnown = true;
-			}
-		}
-
-		// recomendado:
-		//  - instalacion directa (solo "instalacion_directa", sin zip): descarga x 1.4
-		//  - instalacion normal por zip: (descarga + extraido) x 1.3
-		uint64_t baseBytes, recommended;
-		if (package.isDirectOnly())
-		{
-			baseBytes = package.getDownloadSize();
-			recommended = baseBytes + baseBytes * 4 / 10;
-		}
-		else
-		{
-			baseBytes = package.getDownloadSize() + package.getExtractedSize();
-			recommended = baseBytes + baseBytes * 3 / 10;
-		}
-		const bool needKnown = baseBytes > 0;
+		const SdSpace sd = computeSdSpace(get, package);
+		const uint64_t freeBytes = sd.freeBytes;
+		const uint64_t recommended = sd.recommended;
+		const bool freeKnown = sd.freeKnown;
+		const bool needKnown = sd.needKnown;
 
 		CST_Color* status = &white; // sin datos suficientes: color normal
 		if (freeKnown && needKnown)
@@ -257,7 +279,7 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 		sdFreeVal.setColorPtr(status);
 		sdFreeVal.update();
 
-		sdNeed.setText(tr("details.sdrecommended", "Espacio libre recomendado:"));
+		sdNeed.setText(tr("details.sdrecommended", "Espacio recomendado:"));
 		sdNeed.update();
 		sdNeedVal.setText(needKnown ? getHumanReadableBytes(recommended) : std::string("N/D"));
 		sdNeedVal.setColorPtr(status);
@@ -303,8 +325,12 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	downloadPercent.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 15 / SCALER);
 	downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
 
+	// velocidad de descarga, entre el porcentaje y el aviso de cancelacion
+	downloadSpeed.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 42 / SCALER);
+	downloadSpeed.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
 	// aviso de cancelacion, debajo del porcentaje
-	cancelHint.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 70 / SCALER);
+	cancelHint.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 78 / SCALER);
 	cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
 }
 
@@ -370,6 +396,42 @@ void AppDetails::proceed()
 			return;
 	}
 
+	// Espacio en la SD antes de empezar (no aplica al desinstalar ni a una actualizacion
+	// incremental, cuyo tamano real no se conoce): si no alcanza ni para lo minimo se
+	// bloquea; si alcanza pero queda justo (menos del recomendado) se pide confirmacion.
+	if (!isUninstall() && !(package->getStatus() == UPDATE && package->canUseUpdateZip()))
+	{
+		const SdSpace sd = computeSdSpace(get, *package);
+		if (sd.freeKnown && sd.needKnown)
+		{
+			auto mb = [](uint64_t b) { return std::to_string((b + 1048575) / 1048576) + " MB"; };
+			if (sd.freeBytes < sd.minimum)
+			{
+				((MainDisplay*)RootDisplay::mainDisplay)->showFullscreenPrompt(
+					"Espacio insuficiente",
+					"No hay espacio suficiente en la SD\n\n"
+					"Necesario: " + mb(sd.minimum) + "\n"
+					"Libre: " + mb(sd.freeBytes) + "\n\n"
+					"Libera espacio e intentalo de nuevo",
+					false);
+				return;
+			}
+			if (sd.freeBytes < sd.recommended)
+			{
+				bool go = ((MainDisplay*)RootDisplay::mainDisplay)->showFullscreenPrompt(
+					"Poco espacio en la SD",
+					"El espacio libre es menor al recomendado\n\n"
+					"Recomendado: " + mb(sd.recommended) + "\n"
+					"Libre: " + mb(sd.freeBytes) + "\n\n"
+					"Puede alcanzar, pero queda muy justo.\n"
+					"Quieres continuar?",
+					true);
+				if (!go)
+					return;
+			}
+		}
+	}
+
 	this->operating = true;
 	// event->update();
 
@@ -379,6 +441,11 @@ void AppDetails::proceed()
 	gBHeldSince = 0;
 	gLastHintSecs = -2;
 	gLastPollTick = 0;
+	gSpeedLastTick = 0;
+	gSpeedMBs = 0.0;
+	showSpeed = false;
+	downloadSpeed.setText(" ");
+	downloadSpeed.update();
 	cancelHint.setText("Manten B 5 s para cancelar");
 	cancelHint.update();
 	cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
@@ -389,6 +456,7 @@ void AppDetails::proceed()
 	super::append(&downloadPercent);
 	if (!isUninstall()) // al desinstalar no aplica
 	{
+		super::append(&downloadSpeed);
 		super::append(&cancelHint);
 		g_libget_poll = &AppDetails::pollCancelHook;
 	}
@@ -718,6 +786,7 @@ void AppDetails::proceed()
 	super::remove(&downloadProgress);
 	super::remove(&downloadStatus);
 	super::remove(&downloadPercent);
+	super::remove(&downloadSpeed);
 	super::remove(&cancelHint);
 
 	// --- Paso 4: mensaje final ---
@@ -913,11 +982,7 @@ void AppDetails::back()
 void AppDetails::moreByAuthor()
 {
 	const char* author = this->package->getAuthor().c_str();
-	appList->sidebar->searchQuery = std::string(author);
-	appList->sidebar->searchModeActive = true;
-	appList->update();
-	appList->y = 0;
-	appList->keyboard.hidden = true;
+	appList->applySearch(std::string(author));
 	RootDisplay::switchSubscreen(nullptr);
 }
 
@@ -1148,6 +1213,15 @@ int AppDetails::updatePopupStatus(int status, int num, int num_total)
 
 		popup->downloadStatus.setText(statusText.str());
 		popup->downloadStatus.update();
+
+		// el medidor solo tiene sentido en la fase de descarga
+		popup->showSpeed = (status == STATUS_DOWNLOADING);
+		gSpeedLastTick = 0;
+		if (!popup->showSpeed)
+		{
+			popup->downloadSpeed.setText(" ");
+			popup->downloadSpeed.update();
+		}
 	}
 	return 0;
 }
@@ -1262,6 +1336,32 @@ int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 		popup->downloadPercent.setText(std::to_string(percentInt) + "%");
 		popup->downloadPercent.update();
 		popup->downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+
+		// velocidad: se recalcula cada ~1 s con los bytes recibidos; se suaviza para que no salte
+		if (popup->showSpeed)
+		{
+			const unsigned long long bytes = g_libget_net_bytes.load(std::memory_order_relaxed);
+			if (gSpeedLastTick == 0 || bytes < gSpeedLastBytes)
+			{
+				gSpeedLastTick = now;
+				gSpeedLastBytes = bytes;
+				gSpeedMBs = 0.0;
+			}
+			else if (now - gSpeedLastTick >= 1000)
+			{
+				const double inst = (double)(bytes - gSpeedLastBytes) / 1048576.0 / ((now - gSpeedLastTick) / 1000.0);
+				gSpeedMBs = (gSpeedMBs <= 0.0) ? inst : gSpeedMBs * 0.5 + inst * 0.5;
+				gSpeedLastTick = now;
+				gSpeedLastBytes = bytes;
+
+				char buf[80];
+				const int conns = g_libget_net_conns.load(std::memory_order_relaxed);
+				snprintf(buf, sizeof(buf), "%.1f MB/s  |  %d %s", gSpeedMBs, conns, conns == 1 ? "conexion" : "conexiones");
+				popup->downloadSpeed.setText(buf);
+				popup->downloadSpeed.update();
+				popup->downloadSpeed.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+			}
+		}
 
 		// force render the element right here (and it's progress bar too)
 		if (popup->parent != NULL)

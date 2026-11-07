@@ -827,11 +827,18 @@ int UnZip::ExtractImpl(const std::string& path, const unz_file_info_s& fileInfo)
 	// no fsync() here: it forced a flush to the SD card for every single file,
 	// which is very slow with many files. close() already hands the data to the filesystem.
 	auto tClose0 = clk::now();
-	close(fd);
+	// el resultado de close() cuenta: si falla, los ultimos datos pueden no haberse guardado
+	const int closeRc = close(fd);
 	cross_free(buffer);
 	if (buffer2) cross_free(buffer2);
 	unzCloseCurrentFile(fileToUnzip);
 	statCloseMs += msBetween(tClose0, clk::now());
+
+	if (closeRc != 0)
+	{
+		printf("--> ERROR: close() fallo (errno %d) en %s\n", errno, path.c_str());
+		return -4;
+	}
 
 	if (done != fileInfo.uncompressed_size)
 	{

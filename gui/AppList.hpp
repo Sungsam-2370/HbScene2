@@ -6,7 +6,6 @@
 #include "../libs/chesto/src/ImageElement.hpp"
 #include "../libs/chesto/src/ListElement.hpp"
 #include "../libs/chesto/src/TextElement.hpp"
-#include "../libs/chesto/src/EKeyboard.hpp"
 
 #include "AppCard.hpp"
 #include "AppDetails.hpp"
@@ -36,7 +35,12 @@ public:
 	Get* get = NULL;
 	Sidebar* sidebar = NULL;
 
-	void toggleKeyboard();
+	// Busqueda con el teclado del sistema (Switch): abre el teclado y filtra la lista
+	void openSearch();
+	// muestra los resultados de "query" (tambien lo usa "mas por este autor")
+	void applySearch(const std::string& query);
+	// sale de la busqueda y vuelve a la categoria anterior
+	void clearSearch();
 	void cycleSort();
 	void reorient();
 	void toggleAudio();
@@ -59,7 +63,6 @@ public:
 
 	void launchSettings(bool isCredits);
 	bool hideSidebar = false;
-	EKeyboard keyboard;
 
 	// posiciona el titulo/subtitulo de la seccion (arriba, fijo) y todos los
 	// botones de accion (abajo, en la franja compartida con Sidebar). Se
@@ -79,7 +82,6 @@ private:
 	bool sortCompare(const Package& left, const Package& right);
 	std::random_device randDevice;
 
-	void keyboardInputCallback();
 
 	// the title of this category (from the sidebar)
 	static CST_Color black, gray, red, lighterRed;
@@ -92,6 +94,7 @@ private:
 	Button keyboardBtn;
 	Button backspaceBtn;
 	Button reloadBtn; // "Recargar lista" (+): vuelve a descargar repo.json sin cache
+	TextElement noResults; // "Sin resultados para ..." cuando una busqueda no encuentra nada
 	TextElement nowPlayingText;
 
 #if defined(MUSIC)

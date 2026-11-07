@@ -1,5 +1,6 @@
 #include "ColorPickerScreen.hpp"
 #include "ThemeColorizeScreen.hpp"
+#include "SystemKeyboard.hpp"
 #include "../libs/chesto/src/Constraint.hpp"
 #include <sstream>
 #include <iomanip>
@@ -13,8 +14,7 @@ ColorPickerScreen::ColorPickerScreen(const std::string& title, CST_Color initial
 	, currentColor(initialColor)
 	, onColorPicked(onColorPicked)
 	, titleText(title, 30, &HBAS::ThemeManager::textPrimary)
-	, hint("Touch o flechas: mover/ajustar   A: editar campo   Toca \"Confirmar texto\" para aplicar   B: volver", 16, &HBAS::ThemeManager::textSecondary)
-	, editPreviewText("", 26, &HBAS::ThemeManager::textPrimary)
+	, hint("Touch o flechas: mover/ajustar   A: editar campo (teclado del sistema)   B: volver", 16, &HBAS::ThemeManager::textSecondary)
 	, hexLabel("Codigo Hex", 18, &HBAS::ThemeManager::textSecondary)
 	, hexValue("#000000", 22, &HBAS::ThemeManager::textPrimary)
 	, redLabel("Rojo (R)", 18, &HBAS::ThemeManager::textSecondary)
@@ -74,30 +74,6 @@ ColorPickerScreen::ColorPickerScreen(const std::string& title, CST_Color initial
 	doneButton->action = std::bind(&ColorPickerScreen::confirm, this);
 	this->append(doneButton);
 
-	// teclado en pantalla, oculto hasta que se edite un campo
-	// Se usa el constructor sin callback para que storeOwnText=true y
-	// getTextInput() acumule correctamente los caracteres escritos.
-	keyboard = new EKeyboard();
-	keyboard->position(190, SCREEN_HEIGHT - 360);
-	keyboard->preventEnterAndTab = true;
-	keyboard->updateSize();
-	keyboard->hidden = true;
-	this->append(keyboard);
-
-	// boton visible para confirmar el texto escrito, ya que el teclado en
-	// pantalla de chesto no tiene una tecla "Enter" navegable con D-pad
-	confirmEditButton = new Button("Confirmar", 0, true, 18, 170);
-	confirmEditButton->position(660, SCREEN_HEIGHT - 360 - 60);
-	confirmEditButton->action = std::bind(&ColorPickerScreen::finishEditingField, this);
-	confirmEditButton->hidden = true;
-	this->append(confirmEditButton);
-
-	// vista previa en tiempo real del texto que se esta escribiendo,
-	// se posiciona encima del teclado, oculto hasta que se edita un campo
-	editPreviewText.position(190, SCREEN_HEIGHT - 360 - 50);
-	editPreviewText.hidden = true;
-	this->append(&editPreviewText);
-
 	refreshTexts();
 }
 
@@ -105,8 +81,6 @@ ColorPickerScreen::~ColorPickerScreen()
 {
 	if (wheelTexture) delete wheelTexture;
 	if (doneButton) delete doneButton;
-	if (confirmEditButton) delete confirmEditButton;
-	if (keyboard) delete keyboard;
 }
 
 // ----------------------------------------------------------------------
@@ -309,40 +283,6 @@ void ColorPickerScreen::render(Element* parent)
 
 bool ColorPickerScreen::process(InputEvents* event)
 {
-	// Si estamos editando un campo de texto, el teclado tiene el control total
-	if (editingField != EDIT_NONE)
-	{
-		// Tocar el boton "Confirmar texto" aplica el valor escrito.
-		if (event->isTouchUp() && event->touchIn(660, SCREEN_HEIGHT - 360 - 60, 170, 50))
-		{
-			finishEditingField();
-			return true;
-		}
-
-		// X como atajo adicional, por si hay teclado fisico conectado
-		if (event->pressed(X_BUTTON))
-		{
-			finishEditingField();
-			return true;
-		}
-		// B cancela la edicion del campo sin aplicar el cambio
-		if (event->pressed(B_BUTTON))
-		{
-			editingField = EDIT_NONE;
-			keyboard->hidden = true;
-			confirmEditButton->hidden = true;
-			editPreviewText.hidden = true;
-			return true;
-		}
-
-		// procesar tecla y actualizar el preview en vivo con lo que se va escribiendo
-		bool handled = keyboard->process(event);
-		std::string typed = keyboard->textInput;
-		editPreviewText.setText(typed.empty() ? "(escribe un valor 0-255)" : typed);
-		editPreviewText.update();
-		return handled;
-	}
-
 	if (event->pressed(B_BUTTON))
 	{
 		this->back();
@@ -509,12 +449,8 @@ bool ColorPickerScreen::process(InputEvents* event)
 void ColorPickerScreen::startEditingField(int field)
 {
 	editingField = field;
-	keyboard->hidden = false;
-	confirmEditButton->hidden = false;
 
-	// mostrar el valor actual como referencia visual, pero NO pre-cargarlo
-	// en textInput: el usuario escribe el numero nuevo desde cero, sin
-	// necesitar borrar lo existente (que era el bug que causaba el 255)
+	// valor actual del campo (se muestra ya escrito en el teclado del sistema)
 	std::string currentVal;
 	switch (field)
 	{
@@ -524,19 +460,17 @@ void ColorPickerScreen::startEditingField(int field)
 	case EDIT_B:   currentVal = std::to_string((int)currentColor.b);    break;
 	}
 
-	// empezar con campo vacio para que el usuario escriba sin conflicto
-	keyboard->textInput.clear();
+	const bool numeric = (field != EDIT_HEX);
+	std::string typed;
+	if (SystemKeyboard::ask("Color", numeric ? "Valor de 0 a 255" : "Codigo hexadecimal (RRGGBB)",
+							currentVal, numeric ? 3 : 7, typed, numeric))
+		finishEditingField(typed);
 
-	// mostrar "Valor actual: XXX" encima del teclado como referencia
-	editPreviewText.setText("Valor actual: " + currentVal + "   |   Escribe el nuevo valor:");
-	editPreviewText.update();
-	editPreviewText.hidden = false;
+	editingField = EDIT_NONE;
 }
 
-void ColorPickerScreen::finishEditingField()
+void ColorPickerScreen::finishEditingField(const std::string& text)
 {
-	std::string text = keyboard->getTextInput();
-
 	switch (editingField)
 	{
 	case EDIT_HEX:
@@ -584,16 +518,6 @@ void ColorPickerScreen::finishEditingField()
 	}
 
 	refreshTexts();
-	editingField = EDIT_NONE;
-	keyboard->hidden = true;
-	confirmEditButton->hidden = true;
-	editPreviewText.hidden = true;
-}
-
-void ColorPickerScreen::keyboardInputCallback()
-{
-	// no se necesita hacer nada en cada tecla individual, el valor final
-	// se procesa en finishEditingField cuando el usuario confirma
 }
 
 void ColorPickerScreen::confirm()

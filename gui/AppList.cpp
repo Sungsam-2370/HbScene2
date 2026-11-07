@@ -5,10 +5,10 @@
 #include "FooterStyle.hpp"
 #include "ToolsScreen.hpp"
 #include "main.hpp"
+#include "SystemKeyboard.hpp"
 
 #include "../libs/get/src/Utils.hpp"
 
-#include "../libs/chesto/src/EKeyboard.hpp"
 #include "../libs/chesto/src/RootDisplay.hpp"
 #include "../libs/chesto/src/Constraint.hpp"
 
@@ -38,9 +38,10 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 	, sidebar(sidebar)	// the sidebar, which will store the currently selected category info
 	, quitBtn(i18n("listing.quit"), SELECT_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
 	, sortBtn(i18n("listing.adjustsort"), Y_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
-	, keyboardBtn(i18n("listing.togglekeyboard"), Y_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
-	, backspaceBtn(i18n("listing.delete"), B_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
+	, keyboardBtn("Nueva busqueda", Y_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
+	, backspaceBtn("Limpiar busqueda", X_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
 	, reloadBtn("Recargar lista", START_BUTTON, false, FOOTER_BTN_TEXT_SIZE, 0, 1.8f)
+	, noResults(" ", 24, &HBAS::ThemeManager::textSecondary, false, 700)
 	, nowPlayingText(" ", 16, &HBAS::ThemeManager::textPrimary)
 #if defined(MUSIC)
 	, nowPlayingIcon(RAMFS "res/nowplaying.png")
@@ -110,18 +111,11 @@ AppList::AppList(Get* get, Sidebar* sidebar)
 #endif
 
 	// search buttons
-	keyboardBtn.action = std::bind(&AppList::toggleKeyboard, this);
+	// busqueda: "Nueva busqueda" (Y) abre el teclado del sistema, "Limpiar busqueda" (X) sale
+	keyboardBtn.action = [this]() { this->openSearch(); };
+	backspaceBtn.action = [this]() { this->clearSearch(); };
 
-	backspaceBtn.action = [this](void) {
-		this->keyboard.backspace();
-	};
-
-	// keyboard input callback
-	// keyboard.hasRoundedKeys = true;
-	keyboard.typeAction = std::bind(&AppList::keyboardInputCallback, this);
-	keyboard.preventEnterAndTab = true;
-	keyboard.width = SCREEN_HEIGHT/SCALER - 20;
-	keyboard.updateSize();
+	noResults.isAbsolute = true;
 
 	// category text
 	category.setSize(28);
@@ -197,39 +191,12 @@ bool AppList::process(InputEvents* event)
 		this->touchMode = true;
 	}
 
-	// if we're showing a keyboard, make sure we're not in its bounds
-	// also make sure the children elements exist before trying the keyboard
-	// AND we're actually on the search category
-	// also if we're not in touchmode, always go in here regardless of any button presses (user can only interact with keyboard)
-	bool keyboardIsShowing = sidebar && sidebar->searchModeActive && !keyboard.hidden;
-	if (keyboardIsShowing && ((event->isTouchDown() && event->touchIn(keyboard.x, keyboard.y, keyboard.width + 305, keyboard.height + 200)) || !touchMode))
-	{
-		// wow I'm surprised this still works with the chesto keyboard
-		ret |= keyboard.process(event);
-		if (event->isKeyDown() && (event->held(Y_BUTTON) || event->held(B_BUTTON)))
-			ret |= ListElement::process(event); // continue processing ONLY if they're pressing Y or B
-		else if (event->noop)
-			ret |= ListElement::process(event); // continue processing if they're not pressing anything
-		
-    if (needsUpdate) update();
-    return ret;
-	}
-
 	int origHighlight = this->highlighted;
 	auto mainDisplay = (MainDisplay*)RootDisplay::mainDisplay;
 
 	// process some joycon input events
 	if (event->isKeyDown())
 	{
-		if (keyboardIsShowing && !event->held(B_BUTTON))
-		{
-			// keyboard is showing, but we'r epressing buttons, and we're down here, so set touch mode and get out
-			touchMode = false;
-			if (event->held(Y_BUTTON)) // again, only let a Y through to toggle keyboard (TODO: redo this!)
-				ret |= ListElement::process(event);
-			return true; // short circuit, should be handled by someone else
-		}
-
 		if (event->held(A_BUTTON | B_BUTTON | UP_BUTTON | DOWN_BUTTON | LEFT_BUTTON | RIGHT_BUTTON))
 		{
 			auto currentSelected = this->highlighted;
@@ -245,7 +212,7 @@ bool AppList::process(InputEvents* event)
 				ret |= true;
 			}
 
-			if (event->held(A_BUTTON) && this->highlighted >= 0)
+			if (event->held(A_BUTTON) && this->highlighted >= 0 && this->highlighted < this->totalCount)
 			{
 				this->elements[this->highlighted]->action();
 				ret |= true;
@@ -598,10 +565,8 @@ void AppList::update()
 	// update the view for the current category
 	if (sidebar->searchModeActive)
 	{
-		// add the keyboard
+		// botones de la busqueda (el teclado es el del sistema, no se dibuja aqui)
 		super::append(&keyboardBtn);
-		keyboard.position(372 + (3 - R) * 132, 417);
-		super::append(&keyboard);
 
 		// category text (busqueda activa)
 		category.setText(std::string(i18n("listing.search") + " \"") + sidebar->searchQuery + "\"");
@@ -609,6 +574,15 @@ void AppList::update()
 		super::append(&category);
 
 		super::append(&backspaceBtn);
+
+		// busqueda sin resultados: mensaje en lugar de una lista vacia
+		if (appCards.empty())
+		{
+			noResults.setText(std::string("Sin resultados para \"") + sidebar->searchQuery + "\"");
+			noResults.update();
+			noResults.position(this->x + 40, 200);
+			super::append(&noResults);
+		}
 	}
 	else
 	{
@@ -811,13 +785,6 @@ void AppList::reorient()
 		this->elements[this->highlighted]->elasticCounter = NO_HIGHLIGHT;
 }
 
-void AppList::keyboardInputCallback()
-{
-	sidebar->searchQuery = keyboard.getTextInput();
-	this->y = 0;
-	needsUpdate = true;
-}
-
 void AppList::cycleSort()
 {
 	reorient();
@@ -863,19 +830,57 @@ void AppList::toggleAudio()
 #endif
 }
 
-void AppList::toggleKeyboard()
+// ---- Busqueda con el teclado del sistema ----
+
+void AppList::applySearch(const std::string& query)
 {
-	reorient();
-	keyboard.hidden = !keyboard.hidden;
-
-	// if it's hidden now, make sure we release our highlight
-	if (keyboard.hidden)
+	const int si = sidebar->searchIndex();
+	if (si >= 0 && sidebar->curCategory != si)
 	{
-		sidebar->highlighted = -1;
-		highlighted = 0;
+		sidebar->prevCategory = sidebar->curCategory;
+		sidebar->curCategory = si;
 	}
+	sidebar->searchQuery = query;
+	sidebar->searchModeActive = true;
+	this->y = 0;
+	update();
+}
 
-	needsRedraw = true;
+void AppList::clearSearch()
+{
+	sidebar->searchModeActive = false;
+	sidebar->searchQuery.clear();
+	const int si = sidebar->searchIndex();
+	if (sidebar->curCategory == si)
+	{
+		int back = sidebar->prevCategory;
+		if (back < 0 || back >= TOTAL_CATS || back == si)
+			back = 0;
+		sidebar->curCategory = back;
+	}
+	this->y = 0;
+	update();
+}
+
+void AppList::openSearch()
+{
+	std::string typed;
+	if (!SystemKeyboard::ask("Buscar", "Nombre, autor o descripcion", sidebar->searchQuery, 64, typed))
+		return; // cancelado (o plataforma sin teclado de sistema): no se cambia nada
+
+	// recorta espacios de los extremos
+	size_t b = typed.find_first_not_of(" \t");
+	size_t e = typed.find_last_not_of(" \t");
+	std::string text = (b == std::string::npos) ? std::string() : typed.substr(b, e - b + 1);
+
+	if (text.empty())
+	{
+		// confirmo vacio: si habia una busqueda activa, se limpia
+		if (sidebar->searchModeActive)
+			clearSearch();
+		return;
+	}
+	applySearch(text);
 }
 
 void AppList::launchSettings(bool isCredits)

@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <vector>
@@ -52,6 +53,7 @@
 #include <locale>
 
 #include "Utils.hpp"
+#include "Cancel.hpp"
 
 // resinfs support, if present
 #if defined(USE_RAMFS)
@@ -82,6 +84,10 @@ static int libget_curl_progress_wrapper(void* /*clientp*/, double dltotal, doubl
 	if (dltotal == 0)
 		return networking_callback(networking_callback_data, 0.0);
 	
+	// medidor de velocidad de la UI: una sola conexion
+	g_libget_net_bytes.store((unsigned long long)dlnow, std::memory_order_relaxed);
+	g_libget_net_conns.store(1, std::memory_order_relaxed);
+
 	double progress = (double)dlnow / (double)dltotal;
 	
 	// don't go OOB
@@ -763,6 +769,7 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 			curl_easy_setopt(w.easy, CURLOPT_HTTPHEADER, headers);
 	}
 
+	const auto segT0 = std::chrono::steady_clock::now();
 	long nextAssign = 0; // next never-requested chunk
 	std::deque<long> retryQueue;
 	bool failed = false, aborted = false;
@@ -911,6 +918,13 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 			double progress = (double)have / (double)total;
 			if (progress > 1.0)
 				progress = 1.0;
+			// medidor de velocidad de la UI: bytes recibidos y conexiones activas
+			int activeConns = 0;
+			for (auto& w : workers)
+				if (w.chunk >= 0)
+					activeConns++;
+			g_libget_net_bytes.store((unsigned long long)have, std::memory_order_relaxed);
+			g_libget_net_conns.store(activeConns, std::memory_order_relaxed);
 			if (networking_callback(networking_callback_data, progress) != 0)
 				aborted = true;
 		}
@@ -953,6 +967,13 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 	if (headers)
 		curl_slist_free_all(headers);
 	fclose(out); // flushes: what is on disk is exactly [0, written)
+	g_libget_net_conns.store(0, std::memory_order_relaxed);
+	{
+		const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - segT0).count();
+		const double mb = (double)((long long)written - (long long)start) / 1048576.0;
+		if (secs > 0.5)
+			printf("--> Segmented download: %.1f MB en %.1f s = %.2f MB/s promedio\n", mb, secs, mb / secs);
+	}
 
 	if (failed || aborted)
 	{

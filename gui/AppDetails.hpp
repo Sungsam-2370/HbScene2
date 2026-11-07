@@ -87,6 +87,8 @@ private:
 	TextElement downloadStatus;
 	TextElement downloadPercent;
 	TextElement cancelHint; // "Manten B 5 s para cancelar" / cuenta regresiva
+	TextElement downloadSpeed; // "12.4 MB/s  |  8 conexiones" (solo mientras se descarga)
+	bool showSpeed = false;    // true cuando la fase actual es la descarga
 };
 
 #endif

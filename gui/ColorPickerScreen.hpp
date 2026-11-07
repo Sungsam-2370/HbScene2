@@ -4,7 +4,6 @@
 #include "../libs/chesto/src/RootDisplay.hpp"
 #include "../libs/chesto/src/TextElement.hpp"
 #include "../libs/chesto/src/Button.hpp"
-#include "../libs/chesto/src/EKeyboard.hpp"
 #include "../libs/chesto/src/Texture.hpp"
 #include "ThemeManager.hpp"
 #include <functional>
@@ -62,16 +61,11 @@ private:
 	TextElement blueValue;
 
 	Button* doneButton = nullptr;
-	Button* confirmEditButton = nullptr; // boton visible para confirmar el texto durante la edicion
-
-	// muestra en tiempo real el texto que el usuario esta escribiendo
-	TextElement editPreviewText;
 
 	// cual campo esta actualmente en edicion (-1 = ninguno, la rueda/barra
 	// tienen el foco de navegacion normal)
 	enum EditField { EDIT_NONE = -1, EDIT_HEX = 0, EDIT_R = 1, EDIT_G = 2, EDIT_B = 3 };
 	int editingField = EDIT_NONE;
-	EKeyboard* keyboard = nullptr;
 
 	// foco de navegacion cuando no se esta editando un campo de texto:
 	// 0 = rueda de color, 1 = barra de valor, 2..5 = campos hex/r/g/b, 6 = boton Listo
@@ -89,8 +83,7 @@ private:
 	void updateFromRGB();           // recalcula h/s/v a partir de currentColor
 	void refreshTexts();            // actualiza los TextElement con los valores actuales
 	void startEditingField(int field);
-	void finishEditingField();
-	void keyboardInputCallback();
+	void finishEditingField(const std::string& text);
 };
 
 #endif

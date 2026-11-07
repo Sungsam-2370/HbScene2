@@ -1,6 +1,7 @@
 #include "Feedback.hpp"
 #include "MainDisplay.hpp"
 #include "main.hpp"
+#include "SystemKeyboard.hpp"
 
 #include "../libs/chesto/src/RootDisplay.hpp"
 
@@ -15,8 +16,7 @@ Feedback::Feedback(Package& package)
 	, icon(package.getIconUrl().c_str(), []{ return new ImageElement(RAMFS "res/default.png"); })
 	, quit(i18n("feedback.discard"), Y_BUTTON, false, 20)
 	, send(i18n("feedback.submit"), X_BUTTON, false, 20)
-	, backspaceBtn(i18n("feedback.delete"), B_BUTTON, false, 15)
-	, capsBtn(i18n("feedback.caps"), L_BUTTON, false, 15)
+	, writeBtn("Escribir mensaje", A_BUTTON, false, 20)
 	, response(i18n("feedback.help"), 20, NULL, false, 460)
 {
 	title.position(50, 30);
@@ -31,13 +31,6 @@ Feedback::Feedback(Package& package)
 #endif
 	super::append(&icon);
 
-	// keyboard.hasRoundedKeys = true;
-
-	keyboard.typeAction = std::bind(&Feedback::keyboardInputCallback, this);
-	keyboard.preventEnterAndTab = true;
-	keyboard.updateSize();
-	super::append(&keyboard);
-
 	quit.position(895, 240);
 	quit.action = std::bind(&Feedback::back, this);
 	super::append(&quit);
@@ -46,18 +39,10 @@ Feedback::Feedback(Package& package)
 	send.action = std::bind(&Feedback::submit, this);
 	super::append(&send);
 
-	backspaceBtn.position(quit.x - 15 - backspaceBtn.width, send.y);
-	backspaceBtn.action = [this](void) {
-		this->keyboard.backspace();
-	};
-	super::append(&backspaceBtn);
-
-	capsBtn.position(backspaceBtn.x - 15 - capsBtn.width, send.y);
-	capsBtn.action = [this](void) {
-		this->keyboard.capsOn = !this->keyboard.capsOn;
-		this->keyboard.updateSize();
-	};
-	super::append(&capsBtn);
+	// escribir el mensaje con el teclado del sistema (A)
+	writeBtn.position(quit.x - 15 - writeBtn.width, send.y);
+	writeBtn.action = std::bind(&Feedback::edit, this);
+	super::append(&writeBtn);
 
 	response.position(860, 20);
 	super::append(&response);
@@ -86,7 +71,7 @@ bool Feedback::process(InputEvents* event)
 
 	if (needsRefresh)
 	{
-		feedback.setText(keyboard.getTextInput());
+		feedback.setText(message.empty() ? std::string(" ") : message);
 		feedback.update();
 		needsRefresh = false;
 	}
@@ -94,9 +79,14 @@ bool Feedback::process(InputEvents* event)
 	return ret;
 }
 
-void Feedback::keyboardInputCallback()
+void Feedback::edit()
 {
-	needsRefresh = true;
+	std::string typed;
+	if (SystemKeyboard::ask("Mensaje", "Escribe tu mensaje", message, 500, typed, false, true))
+	{
+		message = typed;
+		needsRefresh = true;
+	}
 }
 
 void Feedback::submit()
@@ -117,7 +107,11 @@ void Feedback::submit()
 	if (curl)
 	{
 		curl_easy_setopt(curl, CURLOPT_URL, "http://switchbru.com/appstore/feedback");
-		std::string fields = std::string("name=") + userKey + "&package=" + package->getPackageName() + "&message=" + keyboard.getTextInput();
+		// el mensaje puede traer acentos, & o saltos de linea: se codifica para el POST
+		char* escaped = curl_easy_escape(curl, message.c_str(), (int)message.size());
+		std::string fields = std::string("name=") + userKey + "&package=" + package->getPackageName() + "&message=" + (escaped ? escaped : "");
+		if (escaped)
+			curl_free(escaped);
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, fields.c_str());
 
 		res = curl_easy_perform(curl);

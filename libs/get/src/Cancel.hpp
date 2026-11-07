@@ -27,6 +27,11 @@
 inline std::atomic<bool> g_libget_cancel{false};
 inline void (*g_libget_poll)() = nullptr;
 
+// Medidor de descarga (solo lectura para la UI): bytes recibidos de la descarga en curso
+// (acumulado de ese archivo) y conexiones que estan transfiriendo ahora mismo.
+inline std::atomic<unsigned long long> g_libget_net_bytes{0};
+inline std::atomic<int> g_libget_net_conns{0};
+
 inline bool libget_cancelled() { return g_libget_cancel.load(); }
 inline void libget_cancel_request() { g_libget_cancel.store(true); }
 inline void libget_cancel_reset() { g_libget_cancel.store(false); }

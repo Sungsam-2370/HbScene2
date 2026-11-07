@@ -11,7 +11,7 @@ class AppList;
 #if defined(USE_OSC_BRANDING)
 #define TOTAL_CATS 6
 #else
-#define TOTAL_CATS 12
+#define TOTAL_CATS 13
 #endif
 
 // altura de la franja inferior compartida (indicador L + botones de accion).
@@ -60,6 +60,18 @@ public:
 	// the currently selected category index
 	int curCategory = 0; // 0 es "Novedades" (primera categoria, se muestra al iniciar)
 
+	// categoria que estaba activa antes de entrar a la busqueda (a ella se vuelve al limpiar)
+	int prevCategory = 0;
+
+	// indice de la entrada "Buscar" en el menu (-1 si no existe)
+	int searchIndex() const
+	{
+		for (int i = 0; i < TOTAL_CATS; i++)
+			if (std::string(cat_value[i]) == "_search")
+				return i;
+		return -1;
+	}
+
 	// vertical scroll offset for the category list (in pixels, scaled)
 	int scrollOffset = 0;
 
@@ -68,8 +80,8 @@ public:
 	const char* cat_names[TOTAL_CATS] = { "sidebar.search", "sidebar.all", "sidebar.utilities", "sidebar.emulators", "sidebar.games", "sidebar.media" };
 	const char* cat_value[TOTAL_CATS] = { "_search", "_all", "utilities", "emulators", "games", "media" };
 #else
-	const char* cat_names[TOTAL_CATS] = { "Novedades", "sidebar.all", "Mis juegos", "Emuladores", "Traducciones", "Ports Juegos", "NxMasters", "Mods Juegos", "PkUnico", "N64 Nativos", "NSO Juegos Extra", "sidebar.misc" };
-	const char* cat_value[TOTAL_CATS] = { "_novedades", "_all", "_misjuegos", "Emuladores", "Traducciones", "Ports", "NxMasters", "Mods Juegos", "PkUnico", "N64_Nativos", "NSO", "_misc" };
+	const char* cat_names[TOTAL_CATS] = { "Novedades", "Buscar", "sidebar.all", "Mis juegos", "Emuladores", "Traducciones", "Ports Juegos", "NxMasters", "Mods Juegos", "PkUnico", "N64 Nativos", "NSO Juegos Extra", "sidebar.misc" };
+	const char* cat_value[TOTAL_CATS] = { "_novedades", "_search", "_all", "_misjuegos", "Emuladores", "Traducciones", "Ports", "NxMasters", "Mods Juegos", "PkUnico", "N64_Nativos", "NSO", "_misc" };
 #endif
 
 	ImageElement* hider = nullptr;

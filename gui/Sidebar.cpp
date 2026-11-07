@@ -278,6 +278,13 @@ bool Sidebar::process(InputEvents* event)
 				if (event->isTouchUp() && previouslySelected >= 0 && x != previouslySelected)
 					return true;
 
+				// "Buscar" no es una categoria: abre el teclado del sistema
+				if (std::string(this->cat_value[x]) == "_search" && this->appList != NULL)
+				{
+					this->appList->openSearch();
+					return true;
+				}
+
 				// saw touchup on a category, adjust active category
 				this->curCategory = x;
 
