@@ -657,7 +657,7 @@ static size_t SegWriteCallback(void* contents, size_t size, size_t nmemb, void* 
 #if defined(_3DS) || defined(WII) || defined(WIIU)
 int libget_download_connections = 1; // not enough RAM to spare
 #else
-int libget_download_connections = 4;
+int libget_download_connections = 6;
 #endif
 
 // Returns true if the whole file was downloaded.
