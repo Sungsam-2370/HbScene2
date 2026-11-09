@@ -356,7 +356,7 @@ void AppDetails::showHintIdle()
 	super::remove(&hintIcon);
 	super::remove(&hintRight);
 
-	const std::string iconPath = Button::getControllerButtonImageForPlatform(B_BUTTON, false, false);
+	std::string iconPath = Button::getControllerButtonImageForPlatform(B_BUTTON, false, false);
 	hintLeft.update();
 	hintRight.update();
 
@@ -399,7 +399,7 @@ void AppDetails::showPlusHint()
 	super::remove(&plusFallback);
 
 	const int y = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT - 46 / SCALER;
-	const std::string iconPath = Button::getControllerButtonImageForPlatform(START_BUTTON, false, false);
+	std::string iconPath = Button::getControllerButtonImageForPlatform(START_BUTTON, false, false);
 	plusLeft.update();
 	plusRight.update();
 
