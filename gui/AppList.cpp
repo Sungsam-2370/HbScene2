@@ -458,7 +458,7 @@ void AppList::update()
 	// "Novedades" is a special category: instead of filtering by a category name,
 	// it shows only the last N packages added/updated (across all categories),
 	// selected by update date (descending) and, as a tiebreaker, by the package's
-	// "name" field (ascending, alphabetical). This selection is independent of
+	// "title" (ascending, alphabetical). This selection is independent of
 	// whichever sortMode the user currently has active.
 	constexpr size_t NOVEDADES_COUNT = 9;
 	std::vector<Package> novedadesPackages;
@@ -478,7 +478,7 @@ void AppList::update()
 		std::sort(novedadesPackages.begin(), novedadesPackages.end(), [](const Package& left, const Package& right) {
 			if (left.getUpdatedAtTimestamp() != right.getUpdatedAtTimestamp())
 				return left.getUpdatedAtTimestamp() > right.getUpdatedAtTimestamp();
-			return left.getPackageName() < right.getPackageName();
+			return left.getTitle() < right.getTitle(); // empate de fecha: por titulo (alfabetico)
 		});
 
 		if (novedadesPackages.size() > NOVEDADES_COUNT)

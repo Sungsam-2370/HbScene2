@@ -1,6 +1,8 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <cmath>
+#include <algorithm>
 #include <sys/statvfs.h>
 
 #if defined(SWITCH)
@@ -32,6 +34,7 @@
 #include "RecentContentPolicy.hpp"
 #include "SupporterBenefit.hpp"
 #include "main.hpp"
+#include "TransferSummary.hpp"
 // gAtmosphereValid se declara en main.hpp y se define en main.cpp
 
 int AppDetails::lastFrameTime = 99;
@@ -41,6 +44,7 @@ static constexpr int CANCEL_HOLD_MS = 5000;
 static int gBHeldSince = 0;      // instante en que se presiono B (0 = no esta presionada)
 static int gLastHintSecs = -2;   // ultimo estado mostrado en el aviso (para no redibujar de mas)
 static int gLastPollTick = 0;
+static bool gRestMode = false; // pantalla de descanso activa (solo durante una descarga/instalacion)
 
 // medidor de velocidad: ultima muestra (instante y bytes) y valor suavizado
 static int gSpeedLastTick = 0;
@@ -131,8 +135,17 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	, content(&package, appList->useBannerIcons)
 	, downloadStatus(i18n("details.status"), 30 / SCALER, &white)
 	, downloadPercent("0%", 24 / SCALER, &white)
-	, cancelHint("Manten B 5 s para cancelar", 20 / SCALER, &white)
+	, cancelHint(" ", 20 / SCALER, &white)
 	, downloadSpeed(" ", 20 / SCALER, &white)
+	, hintLeft("Mantén", 20 / SCALER, &white)
+	, hintRight("5 segundos para cancelar", 20 / SCALER, &white)
+	, hintIcon(Button::getControllerButtonImageForPlatform(B_BUTTON, false, false))
+	, plusLeft("Pulsa", 20 / SCALER, &white)
+	, plusRight("para apagar la pantalla", 20 / SCALER, &white)
+	, plusFallback("Pulsa + para apagar la pantalla", 20 / SCALER, &white)
+	, plusIcon(Button::getControllerButtonImageForPlatform(START_BUTTON, false, false))
+	, restPercent("0%", 44 / SCALER, &restColor)
+	, restSpeed(" ", 22 / SCALER, &restColor)
 {
 	// TODO: show current app status somewhere
 
@@ -326,12 +339,149 @@ AppDetails::AppDetails(Package& package, AppList* appList, AppCard* appCard)
 	downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
 
 	// velocidad de descarga, entre el porcentaje y el aviso de cancelacion
-	downloadSpeed.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 42 / SCALER);
+	downloadSpeed.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 56 / SCALER);
 	downloadSpeed.constrain(ALIGN_CENTER_HORIZONTAL, 0);
 
 	// aviso de cancelacion, debajo del porcentaje
-	cancelHint.position(SCREEN_WIDTH / 2, PANE_WIDTH / 2 + 78 / SCALER);
+	hintY = PANE_WIDTH / 2 + 94 / SCALER;
+	cancelHint.position(SCREEN_WIDTH / 2, hintY);
 	cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+}
+
+// Aviso normal: "Mantén [B] 5 segundos para cancelar", centrado, con el icono del boton B
+void AppDetails::showHintIdle()
+{
+	super::remove(&cancelHint);
+	super::remove(&hintLeft);
+	super::remove(&hintIcon);
+	super::remove(&hintRight);
+
+	const std::string iconPath = Button::getControllerButtonImageForPlatform(B_BUTTON, false, false);
+	hintLeft.update();
+	hintRight.update();
+
+	if (iconPath.empty())
+	{
+		// sin icono disponible (mando desconocido): se escribe la letra
+		cancelHint.setText("Mantén B 5 segundos para cancelar");
+		cancelHint.update();
+		cancelHint.position(SCREEN_WIDTH / 2, hintY);
+		cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+		super::append(&cancelHint);
+		return;
+	}
+
+	hintIcon.loadPath(iconPath);
+	const int iconSize = (int)(hintLeft.height * 1.5f);
+	hintIcon.resize(iconSize, iconSize);
+
+	const int gap = 8 / SCALER;
+	const int total = hintLeft.width + gap + iconSize + gap + hintRight.width;
+	int x = SCREEN_WIDTH / 2 - total / 2;
+
+	hintLeft.position(x, hintY);
+	x += hintLeft.width + gap;
+	hintIcon.position(x, hintY + (hintLeft.height - iconSize) / 2);
+	x += iconSize + gap;
+	hintRight.position(x, hintY);
+
+	super::append(&hintLeft);
+	super::append(&hintIcon);
+	super::append(&hintRight);
+}
+
+// Aviso "Pulsa [+] para apagar la pantalla", centrado al pie, con el icono del boton +
+void AppDetails::showPlusHint()
+{
+	super::remove(&plusLeft);
+	super::remove(&plusIcon);
+	super::remove(&plusRight);
+	super::remove(&plusFallback);
+
+	const int y = SCREEN_HEIGHT - SIDEBAR_FOOTER_HEIGHT - 46 / SCALER;
+	const std::string iconPath = Button::getControllerButtonImageForPlatform(START_BUTTON, false, false);
+	plusLeft.update();
+	plusRight.update();
+
+	if (iconPath.empty())
+	{
+		plusFallback.update();
+		plusFallback.position(SCREEN_WIDTH / 2, y);
+		plusFallback.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+		super::append(&plusFallback);
+		return;
+	}
+
+	plusIcon.loadPath(iconPath);
+	const int iconSize = (int)(plusLeft.height * 1.5f);
+	plusIcon.resize(iconSize, iconSize);
+
+	const int gap = 8 / SCALER;
+	const int total = plusLeft.width + gap + iconSize + gap + plusRight.width;
+	int x = SCREEN_WIDTH / 2 - total / 2;
+	plusLeft.position(x, y);
+	x += plusLeft.width + gap;
+	plusIcon.position(x, y + (plusLeft.height - iconSize) / 2);
+	x += iconSize + gap;
+	plusRight.position(x, y);
+
+	super::append(&plusLeft);
+	super::append(&plusIcon);
+	super::append(&plusRight);
+}
+
+// Cuadro de la pantalla de descanso: fondo negro opaco (en OLED = pixeles apagados) y un
+// bloque pequeno de texto gris que describe una trayectoria lenta y suave (dos oscilaciones de
+// periodos distintos, sin rebotes), asi nada queda fijo en ningun pixel.
+void AppDetails::renderRestFrame()
+{
+	restDim.opacity = 0xFF;
+	restDim.render(RootDisplay::mainDisplay);
+
+	// las texturas de texto solo se regeneran cuando el texto cambia
+	if (restPercentShown != restPercentStr)
+	{
+		restPercentShown = restPercentStr;
+		restPercent.setText(restPercentStr);
+		restPercent.update();
+	}
+	if (restSpeedShown != restSpeedStr)
+	{
+		restSpeedShown = restSpeedStr;
+		restSpeed.setText(restSpeedStr.empty() ? " " : restSpeedStr);
+		restSpeed.update();
+	}
+
+	const int w = std::max(restPercent.width, restSpeed.width);
+	const int gap = 6 / SCALER;
+	const int h = restPercent.height + gap + restSpeed.height;
+	const double t = CST_GetTicks() / 1000.0;
+	const double ax = std::max(0, (SCREEN_WIDTH - w) / 2 - 24);
+	const double ay = std::max(0, (SCREEN_HEIGHT - h) / 2 - 24);
+	int x = (SCREEN_WIDTH - w) / 2 + (int)(ax * sin(6.283185307179586 * t / 310.0));
+	int y = (SCREEN_HEIGHT - h) / 2 + (int)(ay * sin(6.283185307179586 * t / 190.0 + 1.3));
+	x &= ~1; // pasos de 2 px: no redibuja por cada pixel
+	y &= ~1;
+
+	restPercent.position(x + (w - restPercent.width) / 2, y);
+	restSpeed.position(x + (w - restSpeed.width) / 2, y + restPercent.height + gap);
+	restPercent.render(RootDisplay::mainDisplay);
+	restSpeed.render(RootDisplay::mainDisplay);
+}
+
+// Solo texto (cuenta regresiva / "Cancelando..."): reemplaza al aviso normal
+void AppDetails::showHintText(const std::string& text)
+{
+	super::remove(&hintLeft);
+	super::remove(&hintIcon);
+	super::remove(&hintRight);
+	super::remove(&cancelHint);
+
+	cancelHint.setText(text);
+	cancelHint.update();
+	cancelHint.position(SCREEN_WIDTH / 2, hintY);
+	cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+	super::append(&cancelHint);
 }
 
 AppDetails::~AppDetails()
@@ -384,6 +534,17 @@ std::string AppDetails::getAction(Package* package)
 void AppDetails::proceed()
 {
 	if (this->operating) return;
+
+	// Borrar: pide confirmacion (cubre el boton de borrar y la X del boton principal)
+	if (isUninstall())
+	{
+		bool confirmed = ((MainDisplay*)RootDisplay::mainDisplay)->showFullscreenPrompt(
+			"Borrar componente",
+			"¿Deseas borrar \"" + this->package->getTitle() + "\"?",
+			true);
+		if (!confirmed)
+			return;
+	}
 
 	// Si el paquete trae la linea "aviso" en repo.json, se muestra antes de
 	// descargar: A / touch en "Aceptar" confirma, B / touch en "Cancelar" cancela.
@@ -446,18 +607,21 @@ void AppDetails::proceed()
 	showSpeed = false;
 	downloadSpeed.setText(" ");
 	downloadSpeed.update();
-	cancelHint.setText("Manten B 5 s para cancelar");
-	cancelHint.update();
-	cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
 
 	// description of what we're doing
 	super::append(&downloadProgress);
 	super::append(&downloadStatus);
 	super::append(&downloadPercent);
+	gRestMode = false;
+	restAllowed = false;
+	restPercentStr = "0%";
+	restSpeedStr = " ";
 	if (!isUninstall()) // al desinstalar no aplica
 	{
 		super::append(&downloadSpeed);
-		super::append(&cancelHint);
+		showHintIdle();
+		restAllowed = true;
+		showPlusHint();
 		g_libget_poll = &AppDetails::pollCancelHook;
 	}
 
@@ -489,6 +653,8 @@ void AppDetails::proceed()
 		hadManifest = slurp(pkgDir + "manifest.install", bakManifest);
 		hadInfo = slurp(pkgDir + "info.json", bakInfo);
 	}
+
+	g_xfer.reset(); // estadisticas de esta operacion (resumen final)
 
 	// install or remove this package based on the package status
 	if (wasUninstall) {
@@ -788,6 +954,15 @@ void AppDetails::proceed()
 	super::remove(&downloadPercent);
 	super::remove(&downloadSpeed);
 	super::remove(&cancelHint);
+	super::remove(&hintLeft);
+	super::remove(&hintIcon);
+	super::remove(&hintRight);
+	super::remove(&plusLeft);
+	super::remove(&plusIcon);
+	super::remove(&plusRight);
+	super::remove(&plusFallback);
+	gRestMode = false; // la pantalla vuelve sola al terminar
+	restAllowed = false;
 
 	// --- Paso 4: mensaje final ---
 	// Solo para instalaciones (no al desinstalar), mismo estilo que el
@@ -819,6 +994,13 @@ void AppDetails::proceed()
 				if (!package->getInstallList().empty() || !package->getDirectInstallUrl().empty())
 					message += " e instalacion";
 				message += " completadas con exito.";
+			}
+
+			{
+				// resumen de velocidades (se apaga con kShowTransferSummary en TransferSummary.hpp)
+				const std::string summary = TransferSummary::build();
+				if (!summary.empty())
+					message += "\n\n" + summary;
 			}
 
 			if (!package->runtime_install_status.empty())
@@ -1114,6 +1296,13 @@ void AppDetails::render(Element* parent)
 	if (this->parent == NULL)
 		this->parent = parent;
 
+	// pantalla de descanso: en lugar de la interfaz se dibuja solo el cuadro negro
+	if (gRestMode && this->operating)
+	{
+		renderRestFrame();
+		return;
+	}
+
 	// Panel derecho: ancho ajustado para alinearse con los botones (SCREEN_WIDTH - 310)
 	// se le da un margen extra de 20px para que el texto no quede pegado al borde
 	int rightPanelX = SCREEN_WIDTH - 310 - 20;
@@ -1216,6 +1405,7 @@ int AppDetails::updatePopupStatus(int status, int num, int num_total)
 
 		// el medidor solo tiene sentido en la fase de descarga
 		popup->showSpeed = (status == STATUS_DOWNLOADING);
+		popup->restSpeedStr = (status == 1) ? "Extrayendo" : " "; // 1 = extraccion
 		gSpeedLastTick = 0;
 		if (!popup->showSpeed)
 		{
@@ -1244,8 +1434,32 @@ void AppDetails::pollCancel(bool force)
 
 	// atender los eventos pendientes (como antes) y seguir el boton B
 	InputEvents events;
+	bool woke = false;
 	while (events.update())
 	{
+		if (gRestMode)
+		{
+			// pantalla de descanso: cualquier boton o toque la despierta; ese evento
+			// no se reenvia a la interfaz (no dispara nada por accidente)
+			const int anyButton = A_BUTTON | B_BUTTON | X_BUTTON | Y_BUTTON | START_BUTTON | SELECT_BUTTON |
+			                      L_BUTTON | R_BUTTON | ZL_BUTTON | ZR_BUTTON | UP_BUTTON | DOWN_BUTTON |
+			                      LEFT_BUTTON | RIGHT_BUTTON;
+			if (events.pressed(anyButton) || events.isTouchDown())
+			{
+				gRestMode = false;
+				gBHeldSince = 0;
+				woke = true;
+			}
+			continue;
+		}
+		if (events.pressed(START_BUTTON) && popup->restAllowed)
+		{
+			gRestMode = true;
+			gBHeldSince = 0; // un B sostenido no debe cancelar mientras la pantalla esta apagada
+			RootDisplay::mainDisplay->render(NULL); // apagar ya, sin esperar al siguiente avance
+			continue;
+		}
+
 		if (events.pressed(B_BUTTON))
 		{
 			if (gBHeldSince == 0)
@@ -1255,6 +1469,12 @@ void AppDetails::pollCancel(bool force)
 			gBHeldSince = 0;
 
 		RootDisplay::mainDisplay->process(&events);
+	}
+
+	if (woke)
+	{
+		gLastHintSecs = -2; // que el aviso de cancelar se redibuje
+		RootDisplay::mainDisplay->render(NULL);
 	}
 
 	// cuanto lleva presionada (si se solto antes de tiempo, no pasa nada)
@@ -1273,17 +1493,12 @@ void AppDetails::pollCancel(bool force)
 	if (secs != gLastHintSecs)
 	{
 		gLastHintSecs = secs;
-		std::string text;
-		if (secs == 0)
-			text = "Cancelando...";
-		else if (secs > 0)
-			text = "Cancelando en " + std::to_string(secs) + "  (suelta B para continuar)";
+		if (secs < 0)
+			popup->showHintIdle();
+		else if (secs == 0)
+			popup->showHintText("Cancelando...");
 		else
-			text = "Manten B 5 s para cancelar";
-
-		popup->cancelHint.setText(text);
-		popup->cancelHint.update();
-		popup->cancelHint.constrain(ALIGN_CENTER_HORIZONTAL, 0);
+			popup->showHintText("Cancelando en " + std::to_string(secs) + "  (suelta B para continuar)");
 
 		// que se vea aunque la operacion no este reportando progreso
 		RootDisplay::mainDisplay->render(NULL);
@@ -1333,6 +1548,7 @@ int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 		int percentInt = (int)(amount * 100);
 		if (percentInt < 0) percentInt = 0;
 		if (percentInt > 100) percentInt = 100;
+		popup->restPercentStr = std::to_string(percentInt) + "%";
 		popup->downloadPercent.setText(std::to_string(percentInt) + "%");
 		popup->downloadPercent.update();
 		popup->downloadPercent.constrain(ALIGN_CENTER_HORIZONTAL, 0);
@@ -1357,6 +1573,11 @@ int AppDetails::updateCurrentlyDisplayedPopup(void* clientp, double dlnow)
 				char buf[80];
 				const int conns = g_libget_net_conns.load(std::memory_order_relaxed);
 				snprintf(buf, sizeof(buf), "%.1f MB/s  |  %d %s", gSpeedMBs, conns, conns == 1 ? "conexion" : "conexiones");
+				{
+					char rbuf[32];
+					snprintf(rbuf, sizeof(rbuf), "%.1f MB/s", gSpeedMBs);
+					popup->restSpeedStr = rbuf;
+				}
 				popup->downloadSpeed.setText(buf);
 				popup->downloadSpeed.update();
 				popup->downloadSpeed.constrain(ALIGN_CENTER_HORIZONTAL, 0);

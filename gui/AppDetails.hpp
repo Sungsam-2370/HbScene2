@@ -3,6 +3,7 @@
 
 #include "AppDetailsContent.hpp"
 #include "AppCard.hpp"
+#include "DimOverlay.hpp"
 
 class AppList;
 
@@ -86,9 +87,36 @@ private:
 	AppDetailsContent content;
 	TextElement downloadStatus;
 	TextElement downloadPercent;
-	TextElement cancelHint; // "Manten B 5 s para cancelar" / cuenta regresiva
+	TextElement cancelHint; // cuenta regresiva / "Cancelando..." (el aviso normal es hintLeft + icono + hintRight)
 	TextElement downloadSpeed; // "12.4 MB/s  |  8 conexiones" (solo mientras se descarga)
 	bool showSpeed = false;    // true cuando la fase actual es la descarga
+
+	// aviso normal de cancelacion: "Mantén [B] 5 segundos para cancelar" (texto + icono + texto)
+	TextElement hintLeft;
+	TextElement hintRight;
+	ImageElement hintIcon;
+	int hintY = 0;
+	void showHintIdle();                       // muestra el aviso normal con el icono de B
+	void showHintText(const std::string& text); // muestra solo un texto (cuenta regresiva)
+
+	// pantalla de descanso (OLED): "Pulsa [+] para apagar la pantalla" al pie y, al pulsar +,
+	// pantalla negra con el porcentaje y la velocidad moviendose despacio. Cualquier boton
+	// o toque la despierta; al terminar la operacion vuelve sola.
+	TextElement plusLeft;
+	TextElement plusRight;
+	TextElement plusFallback;
+	ImageElement plusIcon;
+	DimOverlay restDim;
+	CST_Color restColor = { 0x78, 0x78, 0x78, 0xFF }; // gris tenue
+	TextElement restPercent;
+	TextElement restSpeed;
+	std::string restPercentStr = "0%";  // texto vigente (lo actualiza el callback de progreso)
+	std::string restSpeedStr = " ";
+	std::string restPercentShown;       // el que ya esta dibujado (para no regenerar texturas)
+	std::string restSpeedShown;
+	bool restAllowed = false;           // solo en descargas/instalaciones, no al borrar
+	void showPlusHint();
+	void renderRestFrame();
 };
 
 #endif

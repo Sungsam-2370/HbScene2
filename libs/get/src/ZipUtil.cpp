@@ -15,6 +15,7 @@
 #include "Utils.hpp"
 #include "ZipUtil.hpp"
 #include "Cancel.hpp"
+#include "TransferStats.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -252,6 +253,13 @@ void UnZip::Close()
 			printf("--> Extraction stats: %llu files, %llu MB, %.1f s inside Extract(), %.1f s total with the zip open\n",
 				   (unsigned long long)statFiles, (unsigned long long)(statBytes >> 20), statExtractMs / 1000.0,
 				   totalMs / 1000.0);
+			g_xfer.exFiles += statFiles;
+			g_xfer.exBytes += statBytes;
+			g_xfer.exSeconds += totalMs / 1000.0;
+			g_xfer.exOpenMs += statOpenMs;
+			g_xfer.exInflateMs += statInflateMs;
+			g_xfer.exWriteMs += statWriteMs;
+			g_xfer.exCloseMs += statCloseMs;
 			printf("--> Extraction breakdown (s): open/create %.2f | read+inflate %.2f | write %.2f | close %.2f | async files %llu\n",
 				   statOpenMs / 1000.0, statInflateMs / 1000.0, statWriteMs / 1000.0, statCloseMs / 1000.0,
 				   (unsigned long long)statAsyncFiles);

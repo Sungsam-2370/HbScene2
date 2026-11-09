@@ -54,6 +54,7 @@
 
 #include "Utils.hpp"
 #include "Cancel.hpp"
+#include "TransferStats.hpp"
 
 // resinfs support, if present
 #if defined(USE_RAMFS)
@@ -778,6 +779,7 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 	}
 
 	const auto segT0 = std::chrono::steady_clock::now();
+	auto statLastTick = segT0;
 	long nextAssign = 0; // next never-requested chunk
 	std::deque<long> retryQueue;
 	bool failed = false, aborted = false;
@@ -902,6 +904,7 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 				printf("--> chunk %ld failed (curl=%d http=%ld got=%zu/%zu), retry %d\n", w->chunk,
 					   (int)msg->data.result, http, c.data.size(), c.expected, c.retries + 1);
 				gLastCurlErrorMsg = curl_easy_strerror(msg->data.result);
+				g_xfer.dlRetries++;
 				c.received = 0;
 				if (++c.retries > SEG_MAX_RETRIES)
 					failed = true;
@@ -933,6 +936,21 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 					activeConns++;
 			g_libget_net_bytes.store((unsigned long long)have, std::memory_order_relaxed);
 			g_libget_net_conns.store(activeConns, std::memory_order_relaxed);
+
+			// estadisticas para el resumen final (tiempo ponderado por tick)
+			{
+				const auto tNow = std::chrono::steady_clock::now();
+				const double dt = std::chrono::duration<double>(tNow - statLastTick).count();
+				statLastTick = tNow;
+				if (dt > 0 && dt < 5.0 && nextAssign < nchunks) // aun hay trozos por pedir
+				{
+					g_xfer.dlWorkSec += dt;
+					g_xfer.dlConnSec += dt * activeConns;
+					const bool idleWorker = activeConns < nworkers;
+					if (idleWorker && retryQueue.empty() && nextAssign >= nextWrite + SEG_WINDOW_CHUNKS)
+						g_xfer.dlWindowFullSec += dt;
+				}
+			}
 			if (networking_callback(networking_callback_data, progress) != 0)
 				aborted = true;
 		}
@@ -981,6 +999,13 @@ static bool downloadFileSegmented(const std::string& remote_path, const std::str
 		const double mb = (double)((long long)written - (long long)start) / 1048576.0;
 		if (secs > 0.5)
 			printf("--> Segmented download: %.1f MB en %.1f s = %.2f MB/s promedio\n", mb, secs, mb / secs);
+		if (!failed && !aborted)
+		{
+			g_xfer.dlBytes += (unsigned long long)((long long)written - (long long)start);
+			g_xfer.dlSeconds += secs;
+			if (nworkers > g_xfer.dlConnsMax)
+				g_xfer.dlConnsMax = nworkers;
+		}
 	}
 
 	if (failed || aborted)
