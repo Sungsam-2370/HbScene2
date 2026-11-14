@@ -112,23 +112,22 @@ bool Package::downloadZip(std::string_view tmp_path, float*, bool resume, int zi
 	return success;
 }
 
-bool Package::downloadZip2(std::string_view tmp_path, float*, bool resume, int zipIndex, int zipTotal) const
+bool Package::downloadExtraZip(std::string_view tmp_path, float*, bool resume, int zipIndex, int zipTotal) const
 {
-	if (this->zipUrl2.empty()) {
-		return false; // no second zip, nothing to do
-	}
+	const std::string& url = getExtraZipUrl(zipIndex);
+	if (url.empty())
+		return false; // no existe ese zip, nada que hacer
 
 	if (libget_status_callback != nullptr)
 		libget_status_callback(STATUS_DOWNLOADING, zipIndex, zipTotal);
 
-	printf("--> Downloading second zip for %s to %s%s\n", this->pkg_name.c_str(), tmp_path.data(), resume ? " (resuming)" : "");
+	printf("--> Downloading zip %d/%d for %s to %s%s\n", zipIndex, zipTotal, this->pkg_name.c_str(), tmp_path.data(), resume ? " (resuming)" : "");
 
-	// use a different temp filename to avoid overwriting the first zip
-	std::string downloadPath = std::string(tmp_path) + this->pkg_name + "_2.zip";
-
+	// nombre temporal distinto por zip para no pisar los demas: <pkg>_N.zip
+	std::string downloadPath = std::string(tmp_path) + this->pkg_name + "_" + std::to_string(zipIndex) + ".zip";
 	download_metadata_t metadata = {};
 
-	bool success = downloadFileToDiskWithMetadata(this->zipUrl2, downloadPath, resume, &metadata);
+	bool success = downloadFileToDiskWithMetadata(url, downloadPath, resume, &metadata);
 
 	// cancelado por el usuario: se borra lo descargado a medias (no se reanuda)
 	if (!success && libget_cancelled())
@@ -149,11 +148,8 @@ bool Package::downloadZip2(std::string_view tmp_path, float*, bool resume, int z
 				saveDownloadMetadata(downloadPath, metadata);
 			}
 		}
-
 		if (resume)
-		{
 			printf("--> Resume failed. File may have changed on server. Try downloading without --resume\n");
-		}
 	}
 	else
 	{
@@ -531,150 +527,12 @@ bool Package::install(const std::string& pkg_path, const std::string& tmp_path, 
 	return true;
 }
 
-bool Package::downloadZip3(std::string_view tmp_path, float*, bool resume, int zipIndex, int zipTotal) const
+bool Package::installExtraZip(const std::string& pkg_path, const std::string& tmp_path, int zipIndex, int zipTotal)
 {
-	if (this->zipUrl3.empty())
-		return false;
+	if (getExtraZipUrl(zipIndex).empty())
+		return true; // no existe ese zip, nada que hacer
 
-	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_DOWNLOADING, zipIndex, zipTotal);
-
-	printf("--> Downloading third zip for %s to %s%s\n", this->pkg_name.c_str(), tmp_path.data(), resume ? " (resuming)" : "");
-
-	std::string downloadPath = std::string(tmp_path) + this->pkg_name + "_3.zip";
-	download_metadata_t metadata = {};
-
-	bool success = downloadFileToDiskWithMetadata(this->zipUrl3, downloadPath, resume, &metadata);
-
-	// cancelado por el usuario: se borra lo descargado a medias (no se reanuda)
-	if (!success && libget_cancelled())
-	{
-		std::remove(downloadPath.c_str());
-		std::remove(getMetadataPath(downloadPath).c_str());
-		return false;
-	}
-
-	if (!success)
-	{
-		struct stat file_info = {};
-		if (stat(downloadPath.c_str(), &file_info) == 0 && file_info.st_size > 0)
-		{
-			if (!metadata.etag.empty() || metadata.content_length > 0)
-			{
-				printf("--> Saving download metadata for resume validation\n");
-				saveDownloadMetadata(downloadPath, metadata);
-			}
-		}
-		if (resume)
-			printf("--> Resume failed. File may have changed on server. Try downloading without --resume\n");
-	}
-	else
-	{
-		std::string metapath = getMetadataPath(downloadPath);
-		std::remove(metapath.c_str());
-	}
-
-	return success;
-}
-
-bool Package::downloadZip4(std::string_view tmp_path, float*, bool resume, int zipIndex, int zipTotal) const
-{
-	if (this->zipUrl4.empty())
-		return false;
-
-	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_DOWNLOADING, zipIndex, zipTotal);
-
-	printf("--> Downloading fourth zip for %s to %s%s\n", this->pkg_name.c_str(), tmp_path.data(), resume ? " (resuming)" : "");
-
-	std::string downloadPath = std::string(tmp_path) + this->pkg_name + "_4.zip";
-	download_metadata_t metadata = {};
-
-	bool success = downloadFileToDiskWithMetadata(this->zipUrl4, downloadPath, resume, &metadata);
-
-	// cancelado por el usuario: se borra lo descargado a medias (no se reanuda)
-	if (!success && libget_cancelled())
-	{
-		std::remove(downloadPath.c_str());
-		std::remove(getMetadataPath(downloadPath).c_str());
-		return false;
-	}
-
-	if (!success)
-	{
-		struct stat file_info = {};
-		if (stat(downloadPath.c_str(), &file_info) == 0 && file_info.st_size > 0)
-		{
-			if (!metadata.etag.empty() || metadata.content_length > 0)
-			{
-				printf("--> Saving download metadata for resume validation\n");
-				saveDownloadMetadata(downloadPath, metadata);
-			}
-		}
-		if (resume)
-			printf("--> Resume failed. File may have changed on server. Try downloading without --resume\n");
-	}
-	else
-	{
-		std::string metapath = getMetadataPath(downloadPath);
-		std::remove(metapath.c_str());
-	}
-
-	return success;
-}
-
-bool Package::install2(const std::string& pkg_path, const std::string& tmp_path, int zipIndex, int zipTotal)
-{
-	if (this->zipUrl2.empty())
-		return true; // no second zip, nothing to do
-
-	printf("Going to install second zip for %s\n", this->pkg_name.c_str());
-
-	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
-
-	// forzar un redibujado inmediato para que el cambio de texto a
-	// "Instalando... (2/2)" se vea reflejado en pantalla de inmediato,
-	// en vez de quedar congelado con el ultimo frame de la descarga
-	if (networking_callback != nullptr)
-		networking_callback(nullptr, 0.0);  // resetea la barra a 0% al iniciar extraccion
-
-	std::string downloadedFilePath = tmp_path + this->pkg_name + "_2.zip";
-
-	struct ZipGuard {
-		const std::string& path;
-		~ZipGuard() { std::remove(path.c_str()); }
-	} zipGuard{ downloadedFilePath };
-
-	struct stat sbuff = {};
-	stat(downloadedFilePath.c_str(), &sbuff);
-	if (sbuff.st_size == 0)
-	{
-		printf("--> ERROR: Second downloaded file is empty\n");
-		return false;
-	}
-
-	UnZip HomebrewZip(downloadedFilePath);
-	if (!HomebrewZip.IsValid())
-	{
-		printf("--> ERROR: Second downloaded file is not a valid zip\n");
-		return false;
-	}
-
-	// extract all files from the second zip directly, no manifest needed
-	if (HomebrewZip.ExtractAllWithProgress(ROOT_PATH) == -9)
-		return false; // cancelado por el usuario
-
-	printf("--> Second zip installed for %s\n", this->pkg_name.c_str());
-	return true;
-}
-
-bool Package::install3(const std::string& pkg_path, const std::string& tmp_path, int zipIndex, int zipTotal)
-{
-	if (this->zipUrl3.empty())
-		return true;
-
-	printf("Going to install third zip for %s\n", this->pkg_name.c_str());
+	printf("Going to install zip %d/%d for %s\n", zipIndex, zipTotal, this->pkg_name.c_str());
 
 	if (libget_status_callback != nullptr)
 		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
@@ -683,7 +541,7 @@ bool Package::install3(const std::string& pkg_path, const std::string& tmp_path,
 	if (networking_callback != nullptr)
 		networking_callback(nullptr, 0.0);  // resetea la barra a 0% al iniciar extraccion
 
-	std::string downloadedFilePath = tmp_path + this->pkg_name + "_3.zip";
+	std::string downloadedFilePath = tmp_path + this->pkg_name + "_" + std::to_string(zipIndex) + ".zip";
 
 	struct ZipGuard {
 		const std::string& path;
@@ -694,64 +552,22 @@ bool Package::install3(const std::string& pkg_path, const std::string& tmp_path,
 	stat(downloadedFilePath.c_str(), &sbuff);
 	if (sbuff.st_size == 0)
 	{
-		printf("--> ERROR: Third downloaded file is empty\n");
+		printf("--> ERROR: Downloaded file %d is empty\n", zipIndex);
 		return false;
 	}
 
 	UnZip HomebrewZip(downloadedFilePath);
 	if (!HomebrewZip.IsValid())
 	{
-		printf("--> ERROR: Third downloaded file is not a valid zip\n");
+		printf("--> ERROR: Downloaded file %d is not a valid zip\n", zipIndex);
 		return false;
 	}
 
+	// extraer todo directo, sin manifest
 	if (HomebrewZip.ExtractAllWithProgress(ROOT_PATH) == -9)
 		return false; // cancelado por el usuario
 
-	printf("--> Third zip installed for %s\n", this->pkg_name.c_str());
-	return true;
-}
-
-bool Package::install4(const std::string& pkg_path, const std::string& tmp_path, int zipIndex, int zipTotal)
-{
-	if (this->zipUrl4.empty())
-		return true;
-
-	printf("Going to install fourth zip for %s\n", this->pkg_name.c_str());
-
-	if (libget_status_callback != nullptr)
-		libget_status_callback(STATUS_INSTALLING, zipIndex, zipTotal);
-
-	// forzar redibujado inmediato del texto de estado
-	if (networking_callback != nullptr)
-		networking_callback(nullptr, 0.0);  // resetea la barra a 0% al iniciar extraccion
-
-	std::string downloadedFilePath = tmp_path + this->pkg_name + "_4.zip";
-
-	struct ZipGuard {
-		const std::string& path;
-		~ZipGuard() { std::remove(path.c_str()); }
-	} zipGuard{ downloadedFilePath };
-
-	struct stat sbuff = {};
-	stat(downloadedFilePath.c_str(), &sbuff);
-	if (sbuff.st_size == 0)
-	{
-		printf("--> ERROR: Fourth downloaded file is empty\n");
-		return false;
-	}
-
-	UnZip HomebrewZip(downloadedFilePath);
-	if (!HomebrewZip.IsValid())
-	{
-		printf("--> ERROR: Fourth downloaded file is not a valid zip\n");
-		return false;
-	}
-
-	if (HomebrewZip.ExtractAllWithProgress(ROOT_PATH) == -9)
-		return false; // cancelado por el usuario
-
-	printf("--> Fourth zip installed for %s\n", this->pkg_name.c_str());
+	printf("--> Zip %d installed for %s\n", zipIndex, this->pkg_name.c_str());
 	return true;
 }
 
@@ -1010,7 +826,9 @@ int Package::installUpdate(const std::string& pkg_path, const std::string& tmp_p
 void Package::removeTempDownloads(std::string_view tmp_path) const
 {
 	const std::string base = std::string(tmp_path) + this->pkg_name;
-	const std::string files[] = { base + getUrlFileExt(), base + "_2.zip", base + "_3.zip", base + "_4.zip", base + "_upd.zip" };
+	std::vector<std::string> files = { base + getUrlFileExt(), base + "_upd.zip" };
+	for (int i = 2; i <= MAX_ZIPS; i++)
+		files.push_back(base + "_" + std::to_string(i) + ".zip");
 	for (const auto& f : files)
 	{
 		std::remove(f.c_str());

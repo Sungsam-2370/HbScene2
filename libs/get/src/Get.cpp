@@ -136,11 +136,8 @@ int Get::install(Package& package, bool resume)
 		return deltaResult == Package::UPDATE_OK;
 	}
 
-	// calcular cuantos zips existen en total para este paquete (1 a 4)
-	int zipTotal = 1;
-	if (!package.zipUrl2.empty()) zipTotal++;
-	if (!package.zipUrl3.empty()) zipTotal++;
-	if (!package.zipUrl4.empty()) zipTotal++;
+	// calcular cuantos zips existen en total para este paquete (1 a Package::MAX_ZIPS)
+	const int zipTotal = 1 + package.countExtraZips();
 
 	// found package in a remote server, fetch it
 	bool located = package.downloadZip(mTmp_path, nullptr, resume, 1, zipTotal);
@@ -160,49 +157,17 @@ int Get::install(Package& package, bool resume)
 	if (wasCancelled())
 		return false;
 
-	// if a second zip exists, download and install it too
-	if (!package.zipUrl2.empty())
+	// zips adicionales (2..zipTotal): se descargan e instalan en orden
+	for (int n = 2; n <= zipTotal; n++)
 	{
-		bool located2 = package.downloadZip2(mTmp_path, nullptr, resume, 2, zipTotal);
+		bool locatedN = package.downloadExtraZip(mTmp_path, nullptr, resume, n, zipTotal);
 		if (wasCancelled())
 			return false;
-		if (!located2)
-			printf("--> Error retrieving second zip for [%s]\n", package.getPackageName().c_str());
+		if (!locatedN)
+			printf("--> Error retrieving zip %d for [%s]\n", n, package.getPackageName().c_str());
 		else
 		{
-			package.install2(mPkg_path, mTmp_path, 2, zipTotal);
-			if (wasCancelled())
-				return false;
-		}
-	}
-
-	// if a third zip exists, download and install it too
-	if (!package.zipUrl3.empty())
-	{
-		bool located3 = package.downloadZip3(mTmp_path, nullptr, resume, 3, zipTotal);
-		if (wasCancelled())
-			return false;
-		if (!located3)
-			printf("--> Error retrieving third zip for [%s]\n", package.getPackageName().c_str());
-		else
-		{
-			package.install3(mPkg_path, mTmp_path, 3, zipTotal);
-			if (wasCancelled())
-				return false;
-		}
-	}
-
-	// if a fourth zip exists, download and install it too
-	if (!package.zipUrl4.empty())
-	{
-		bool located4 = package.downloadZip4(mTmp_path, nullptr, resume, 4, zipTotal);
-		if (wasCancelled())
-			return false;
-		if (!located4)
-			printf("--> Error retrieving fourth zip for [%s]\n", package.getPackageName().c_str());
-		else
-		{
-			package.install4(mPkg_path, mTmp_path, 4, zipTotal);
+			package.installExtraZip(mPkg_path, mTmp_path, n, zipTotal);
 			if (wasCancelled())
 				return false;
 		}

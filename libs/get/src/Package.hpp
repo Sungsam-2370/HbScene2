@@ -55,13 +55,32 @@ public:
 
 	[[nodiscard]] std::string toString() const;
 	bool downloadZip(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
-	bool downloadZip2(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
-	bool downloadZip3(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
-	bool downloadZip4(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 1, int zipTotal = 1) const;
+	// zips adicionales (2..MAX_ZIPS): zipIndex es la posicion real (2 a MAX_ZIPS)
+	bool downloadExtraZip(std::string_view tmp_path, float* progress = nullptr, bool resume = false, int zipIndex = 2, int zipTotal = 2) const;
 	bool install(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 1, int zipTotal = 1);
-	bool install2(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 2, int zipTotal = 2);
-	bool install3(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 3, int zipTotal = 3);
-	bool install4(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 4, int zipTotal = 4);
+	bool installExtraZip(const std::string& pkg_path, const std::string& tmp_path, int zipIndex = 2, int zipTotal = 2);
+
+	// limite de zips por componente (zip_url, zip_url_2 ... zip_url_10)
+	static constexpr int MAX_ZIPS = 10;
+	// URL del zip numero n (1..MAX_ZIPS); vacio si no existe
+	[[nodiscard]] const std::string& getExtraZipUrl(int n) const
+	{
+		static const std::string empty;
+		if (n < 2 || n > MAX_ZIPS) return empty;
+		const size_t i = static_cast<size_t>(n - 2);
+		return i < extraZipUrls.size() ? extraZipUrls[i] : empty;
+	}
+	// agrega la siguiente URL extra (compactadas: sin huecos, asi zip n = posicion n)
+	void addExtraZipUrl(const std::string& url)
+	{
+		if (url.empty() || static_cast<int>(extraZipUrls.size()) >= MAX_ZIPS - 1) return;
+		extraZipUrls.push_back(url);
+	}
+	// cantidad de zips extra (2..MAX_ZIPS) con URL
+	[[nodiscard]] int countExtraZips() const
+	{
+		return static_cast<int>(extraZipUrls.size());
+	}
 	// --- actualizacion incremental ("actualizacion" en repo.json) ---
 	static constexpr int UPDATE_OK = 0;       // actualizado
 	static constexpr int UPDATE_FALLBACK = 1; // el zip incremental no sirve: usar la descarga completa
@@ -130,11 +149,10 @@ public:
 	}
 
 	// true si el paquete se instala SOLO por "instalacion_directa": trae esa
-	// linea y ningun zip_url (ni _2/_3/_4). No hay zips que bajar.
+	// linea y ningun zip_url (ni _2 ... _10). No hay zips que bajar.
 	[[nodiscard]] bool isDirectOnly() const
 	{
-		return !direct_install_url.empty() && zipUrl.empty() && zipUrl2.empty()
-		       && zipUrl3.empty() && zipUrl4.empty();
+		return !direct_install_url.empty() && zipUrl.empty() && countExtraZips() == 0;
 	}
 
 	// Escribe packages/<nombre>/manifest.install + info.json para que el paquete
@@ -270,9 +288,7 @@ private:
 
 	std::string sourceUrl;
 	std::string zipUrl;   // optional direct zip URL (overrides repo default)
-	std::string zipUrl2;  // optional second zip URL for split packages
-	std::string zipUrl3;  // optional third zip URL for split packages
-	std::string zipUrl4;  // optional fourth zip URL for split packages
+	std::vector<std::string> extraZipUrls; // zip_url_2 ... zip_url_10 (indice 0 = zip 2)
 	std::vector<std::string> install_nsps; // "instalacion" en repo.json: rutas
 	                          // (relativas a ROOT_PATH) de los .nsp/.nsz/.xci a
 	                          // instalar automaticamente, en orden. Vacio por

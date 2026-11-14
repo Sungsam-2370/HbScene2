@@ -164,12 +164,15 @@ std::vector<std::unique_ptr<Package>> GetRepo::loadPackages()
 			package->screens = cur["screens"].GetInt();
 		if (cur.HasMember("zip_url"))
 			package->zipUrl = cur["zip_url"].GetString();
-		if (cur.HasMember("zip_url_2"))
-			package->zipUrl2 = cur["zip_url_2"].GetString();
-		if (cur.HasMember("zip_url_3"))
-			package->zipUrl3 = cur["zip_url_3"].GetString();
-		if (cur.HasMember("zip_url_4"))
-			package->zipUrl4 = cur["zip_url_4"].GetString();
+		// zip_url_2 ... zip_url_10 (limite Package::MAX_ZIPS); si falta alguno
+		// intermedio los demas se recorren (quedan consecutivos)
+		package->extraZipUrls.clear();
+		for (int n = 2; n <= Package::MAX_ZIPS; n++)
+		{
+			const std::string key = "zip_url_" + std::to_string(n);
+			if (cur.HasMember(key.c_str()) && cur[key.c_str()].IsString())
+				package->addExtraZipUrl(cur[key.c_str()].GetString());
+		}
 
 		// ruta del .nsp/.nsz/.xci a instalar automaticamente tras la
 		// extraccion; si no existe esta clave, install_nsps queda vacio
