@@ -443,7 +443,19 @@ static void showBlockedError(const std::string& userMsg)
 #if defined(SWITCH)
 	ErrorSystemConfig err;
 	if (R_SUCCEEDED(errorSystemCreate(&err, userMsg.c_str(), userMsg.c_str())))
+	{
+		// errorSystemCreate deja languageCode vacio, y el applet usa ingles
+		// ("Close"/"Details"). Se le pasa el idioma real de la consola.
+		if (R_SUCCEEDED(setInitialize()))
+		{
+			u64 langCode = 0;
+			if (R_SUCCEEDED(setGetSystemLanguage(&langCode)))
+				errorSystemSetLanguageCode(&err, langCode);
+			setExit();
+		}
+		errorSystemSetCode(&err, errorCodeCreate(2160, 202)); // se muestra como 2160-0202
 		errorSystemShow(&err);
+	}
 #endif
 }
 // ---------------------------------------------------------------------------
