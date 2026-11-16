@@ -68,6 +68,7 @@ static bool checkSwitchScene()
 // ---------------------------------------------------------------------------
 #include "../libs/get/src/libs/rapidjson/include/rapidjson/document.h"
 #include <cstring>
+#include <strings.h>
 #include <cstdint>
 
 bool gAtmosphereValid = false;
@@ -286,6 +287,167 @@ static bool checkAtmosphereHash()
 }
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Lista de bloqueo (bloqueo.json)
+// Descarga SWITCH_REPO/bloqueo.json y, para cada entrada, revisa si en la SD
+// existe el archivo indicado y su SHA-256 coincide. Si alguna coincide, la app
+// muestra el applet de error del sistema y se cierra.
+//
+// Formato esperado de bloqueo.json:
+//   {
+//     "mensaje": "texto opcional que se muestra al usuario",
+//     "entries": [
+//       { "path": "sdmc:/atmosphere/algun_archivo.bin", "sha256": "aabb..." },
+//       { "path": "sdmc:/switch/otro/archivo.nro",      "sha256": "ccdd..." }
+//     ]
+//   }
+//
+// Politica ante fallos de red: si no se puede descargar la lista, la app abre
+// normalmente (no se castiga a un usuario legitimo por no tener WiFi).
+// No se guarda cache, ni logs, ni se escribe nada en la SD: la lista solo
+// vive en memoria y no se imprime nada a consola.
+// ---------------------------------------------------------------------------
+static bool loadBlocklistJson(std::string& out)
+{
+	const std::string url = std::string(SWITCH_REPO) + "/bloqueo.json?nocache=" + std::to_string((long long)time(nullptr));
+
+	for (int attempt = 1; attempt <= 3; attempt++)
+	{
+		out.clear();
+		if (downloadFileToMemory(url, &out) && !out.empty())
+			return true;
+#if defined(SWITCH)
+		svcSleepThread(1'000'000'000ULL);
+#else
+		usleep(1000 * 1000);
+#endif
+	}
+	return false;
+}
+
+// Idioma del sistema como codigo corto ("es", "en", "fr", ...). Si no se puede
+// leer, devuelve "en".
+static std::string systemLangCode()
+{
+#if defined(SWITCH)
+	std::string code = "en";
+	if (R_SUCCEEDED(setInitialize()))
+	{
+		u64 langCode = 0;
+		SetLanguage lang;
+		if (R_SUCCEEDED(setGetSystemLanguage(&langCode)) && R_SUCCEEDED(setMakeLanguage(langCode, &lang)))
+		{
+			switch (lang)
+			{
+				case SetLanguage_ES:
+				case SetLanguage_ES419: code = "es"; break;
+				case SetLanguage_FR:
+				case SetLanguage_FRCA:  code = "fr"; break;
+				case SetLanguage_DE:    code = "de"; break;
+				case SetLanguage_IT:    code = "it"; break;
+				case SetLanguage_PT:
+				case SetLanguage_PTBR:  code = "pt"; break;
+				default:                code = "en"; break;
+			}
+		}
+		setExit();
+	}
+	return code;
+#else
+	return "en";
+#endif
+}
+
+// Mensaje por defecto (sin red de seguridad en el JSON) segun el idioma.
+static const char* defaultBlockMessage(const std::string& lang)
+{
+	if (lang == "es") return "Se ha cerrado el programa a causa de un error";
+	if (lang == "fr") return "Le programme a \xC3\xA9t\xC3\xA9 ferm\xC3\xA9 \xC3\xA0 cause d'une erreur";
+	if (lang == "de") return "Das Programm wurde aufgrund eines Fehlers beendet";
+	if (lang == "it") return "Il programma \xC3\xA8 stato chiuso a causa di un errore";
+	if (lang == "pt") return "O programa foi encerrado devido a um erro";
+	return "The program was closed due to an error";
+}
+
+// Orden de prioridad:
+//   1. "mensajes"[idioma del sistema]   2. "mensajes"["default"]
+//   3. "mensaje" (texto unico, formato anterior)   4. texto interno por idioma
+static std::string pickBlockMessage(const rapidjson::Document& doc)
+{
+	const std::string lang = systemLangCode();
+
+	if (doc.HasMember("mensajes") && doc["mensajes"].IsObject())
+	{
+		const rapidjson::Value& m = doc["mensajes"];
+		if (m.HasMember(lang.c_str()) && m[lang.c_str()].IsString())
+			return m[lang.c_str()].GetString();
+		if (m.HasMember("default") && m["default"].IsString())
+			return m["default"].GetString();
+	}
+	if (doc.HasMember("mensaje") && doc["mensaje"].IsString())
+		return doc["mensaje"].GetString();
+
+	return defaultBlockMessage(lang);
+}
+
+// Devuelve true si el usuario esta bloqueado; en 'userMsg' deja el mensaje.
+static bool checkBlocklist(std::string& userMsg)
+{
+	std::string json;
+	if (!loadBlocklistJson(json))
+		return false;
+
+	rapidjson::Document doc;
+	doc.Parse(json.c_str());
+	if (doc.HasParseError() || !doc.IsObject() || !doc.HasMember("entries") || !doc["entries"].IsArray())
+		return false;
+
+	userMsg = pickBlockMessage(doc);
+
+	const rapidjson::Value& entries = doc["entries"];
+	for (rapidjson::SizeType i = 0; i < entries.Size(); i++)
+	{
+		const rapidjson::Value& e = entries[i];
+		if (!e.IsObject() || !e.HasMember("path") || !e["path"].IsString() || !e.HasMember("sha256"))
+			continue;
+
+		// "sha256" puede ser un solo hash (texto) o una lista de hashes
+		const rapidjson::Value& h = e["sha256"];
+		if (!h.IsString() && !h.IsArray())
+			continue;
+
+		// el archivo se lee una sola vez, sin importar cuantos hashes tenga la entrada
+		const std::string hash = computeFileHash(e["path"].GetString());
+		if (hash.empty())
+			continue; // el archivo no existe en esta SD
+
+		if (h.IsString())
+		{
+			if (strlen(h.GetString()) == 64 && strcasecmp(hash.c_str(), h.GetString()) == 0)
+				return true;
+		}
+		else
+		{
+			for (rapidjson::SizeType k = 0; k < h.Size(); k++)
+				if (h[k].IsString() && strlen(h[k].GetString()) == 64
+				    && strcasecmp(hash.c_str(), h[k].GetString()) == 0)
+					return true;
+		}
+	}
+	return false;
+}
+
+// Muestra el applet de error del sistema (Switch). Despues la app termina.
+static void showBlockedError(const std::string& userMsg)
+{
+#if defined(SWITCH)
+	ErrorSystemConfig err;
+	if (R_SUCCEEDED(errorSystemCreate(&err, userMsg.c_str(), userMsg.c_str())))
+		errorSystemShow(&err);
+#endif
+}
+// ---------------------------------------------------------------------------
+
 #if defined(__WIIU__)
 void setPlatformPwd()
 {
@@ -337,6 +499,20 @@ int main(int argc, char* argv[])
 	init_networking();
 	setUserAgent("HBAS/" APP_VERSION " (" PLATFORM "; Chesto)");
 	HBAS::ThemeManager::themeManagerInit();
+
+#if defined(SWITCH)
+	// Lista de bloqueo: si algun archivo de la SD coincide por hash con una
+	// entrada de bloqueo.json, se muestra el error del sistema y se cierra.
+	{
+		std::string blockMsg;
+		if (checkBlocklist(blockMsg))
+		{
+			showBlockedError(blockMsg);
+			deinit_networking();
+			return 0;
+		}
+	}
+#endif
 
 	// Verificar si el PkUnico de Switch Scene está instalado
 	gSwitchSceneValid = checkSwitchScene();
